@@ -6,7 +6,7 @@
 // no provider is configured the job ends as "needs-provider" with the
 // honest setup message, and nothing is presented as refined.
 
-import { countWords, splitIntoChunks, terminologyNote } from "./chunking";
+import { adaptiveMaxTokens, countWords, splitIntoChunks, terminologyNote } from "./chunking";
 import { analyseDocx, refineDocx } from "./docx";
 import { analyseOdt, refineOdt } from "./odt";
 import { extractPdfText } from "./pdf";
@@ -151,6 +151,23 @@ export async function mapWithConcurrency<T, R>(items: T[], limit: number, fn: (i
 
 export type BatchProgressCallback = (done: number, total: number) => Promise<void> | void;
 
+/** What a paragraph-batch refinement returns. A batch that the provider
+ * could not finish in time falls back to the ORIGINAL paragraph text —
+ * never a failure of the whole job, and never presented as refined. */
+export interface RefineParagraphsResult {
+  texts: string[];
+  failedBatches: number;
+  failedParagraphs: number;
+}
+
+/** What a long-text refinement returns. A chunk that the provider could
+ * not finish in time falls back to the ORIGINAL chunk text. */
+export interface RefineLongTextResult {
+  text: string;
+  failedChunks: number;
+  failedParagraphs: number;
+}
+
 /**
  * Refine a list of paragraphs with the provider, in context-aware batches.
  * Each batch is sent as one call with an explicit paragraph count; the
@@ -165,6 +182,12 @@ export type BatchProgressCallback = (done: number, total: number) => Promise<voi
  * computed once from the whole text up front and shared by every batch
  * (there is no running "seen" state to race on). `onProgress` fires
  * once per completed batch.
+ *
+ * Partial failure is NOT a job failure: if a batch call and its
+ * per-paragraph retries both fail (for example the provider times out),
+ * the affected paragraphs are returned UNCHANGED and counted in
+ * `failedBatches` / `failedParagraphs`. The caller must record that in
+ * the report and must not count those paragraphs as refined.
  */
 export async function refineParagraphTexts(
   provider: AIProvider,
@@ -172,16 +195,18 @@ export async function refineParagraphTexts(
   texts: string[],
   timeoutMs: number,
   onProgress?: BatchProgressCallback,
-): Promise<string[]> {
+): Promise<RefineParagraphsResult> {
   const out: string[] = new Array<string>(texts.length).fill("");
-  // Group into batches of at most ~1,500 words / 12 paragraphs.
+  // Group into batches of at most ~800 words / 8 paragraphs. Smaller
+  // batches mean shorter model outputs per call, so each call finishes
+  // faster and is less likely to hit the per-call timeout.
   const batches: { start: number; items: string[] }[] = [];
   let cur: string[] = [];
   let curWords = 0;
   let curStart = 0;
   texts.forEach((t, i) => {
     const w = countWords(t);
-    if (cur.length > 0 && (curWords + w > 1500 || cur.length >= 12)) {
+    if (cur.length > 0 && (curWords + w > 800 || cur.length >= 8)) {
       batches.push({ start: curStart, items: cur });
       cur = [];
       curWords = 0;
@@ -191,27 +216,45 @@ export async function refineParagraphTexts(
     curWords += w;
   });
   if (cur.length) batches.push({ start: curStart, items: cur });
-  if (batches.length === 0) return out;
+  if (batches.length === 0) return { texts: out, failedBatches: 0, failedParagraphs: 0 };
 
   const context = terminologyNote(texts.join("\n"));
   const contextPrefix = context ? `${context}\n\n` : "";
   let done = 0;
+  let failedBatches = 0;
+  let failedParagraphs = 0;
   const refineBatch = async (batch: { start: number; items: string[] }): Promise<void> => {
+    const batchWords = batch.items.reduce((n, t) => n + countWords(t), 0);
     const joined = batch.items.map((t, j) => `Paragraph ${j + 1}:\n${t}`).join("\n\n");
     const user = `${contextPrefix}Refine each of the following ${batch.items.length} paragraph(s). Return exactly ${batch.items.length} paragraph(s), in the same order, separated by a single blank line. Do not merge, split, reorder, or renumber paragraphs. Do not add headings, labels, or commentary.\n\n${joined}`;
     let refined: string[] | null = null;
     try {
-      const raw = await provider.complete({ system, user, maxTokens: 4096, timeoutMs });
+      const raw = await provider.complete({ system, user, maxTokens: adaptiveMaxTokens(batchWords), timeoutMs });
       const parts = raw.split(/\n\s*\n/).map((p) => p.replace(/^Paragraph \d+:\s*/i, "").trim()).filter(Boolean);
       if (parts.length === batch.items.length) refined = parts;
     } catch {
       refined = null; // fall through to the per-paragraph retry below
     }
     if (!refined) {
-      refined = [];
-      for (const t of batch.items) {
-        const raw = await provider.complete({ system, user: `${contextPrefix}Refine the following text:\n\n${t}`, maxTokens: 4096, timeoutMs });
-        refined.push(raw.trim());
+      // Per-paragraph retry — CONCURRENT (up to 4 in flight), not one
+      // after another. A sequential retry is what turned one slow batch
+      // into a multi-minute invisible grind live: up to 8 paragraphs ×
+      // the full per-call timeout with no progress update in between.
+      // Each paragraph still gets its own timeout; one that cannot
+      // finish falls back to its original text and is counted.
+      let batchFailed = 0;
+      refined = await mapWithConcurrency(batch.items, 4, async (t) => {
+        try {
+          const raw = await provider.complete({ system, user: `${contextPrefix}Refine the following text:\n\n${t}`, maxTokens: adaptiveMaxTokens(countWords(t)), timeoutMs });
+          return raw.trim();
+        } catch {
+          batchFailed += 1;
+          return t; // original text, unchanged
+        }
+      });
+      if (batchFailed > 0) {
+        failedBatches += 1;
+        failedParagraphs += batchFailed;
       }
     }
     batch.items.forEach((_, j) => { out[batch.start + j] = refined?.[j] ?? batch.items[j] as string; });
@@ -219,30 +262,45 @@ export async function refineParagraphTexts(
     if (onProgress) await onProgress(done, batches.length);
   };
   await mapWithConcurrency(batches, 4, refineBatch);
-  return out;
+  return { texts: out, failedBatches, failedParagraphs };
 }
 
-/** Refine long free text (TXT / PDF extraction) in overlapping chunks. */
+/** Refine long free text (TXT / PDF extraction) in overlapping chunks.
+ * A chunk the provider cannot finish in time falls back to the ORIGINAL
+ * chunk text and is counted in `failedChunks` / `failedParagraphs`
+ * (paragraphs inside failed chunks), instead of failing the whole job. */
 export async function refineLongText(
   provider: AIProvider,
   system: string,
   text: string,
   timeoutMs: number,
   onProgress?: BatchProgressCallback,
-): Promise<string> {
+): Promise<RefineLongTextResult> {
   const chunks = splitIntoChunks(text);
-  if (chunks.length === 0) return "";
+  if (chunks.length === 0) return { text: "", failedChunks: 0, failedParagraphs: 0 };
   const contextPrefix = terminologyNote(text);
   const note = contextPrefix ? `${contextPrefix}\n\n` : "";
   let done = 0;
+  let failedChunks = 0;
+  let failedParagraphs = 0;
   const refined = await mapWithConcurrency(chunks, 4, async (chunk) => {
     const user = `${note}${chunk.overlap && chunk.index > 0 ? `Previous paragraph (for context only, do not repeat it): ${chunk.overlap}\n\n` : ""}Refine the following text:\n\n${chunk.text}`;
-    const result = await provider.complete({ system, user, maxTokens: 4096, timeoutMs });
-    done += 1;
-    if (onProgress) await onProgress(done, chunks.length);
-    return result;
+    try {
+      const result = await provider.complete({ system, user, maxTokens: adaptiveMaxTokens(countWords(chunk.text)), timeoutMs });
+      done += 1;
+      if (onProgress) await onProgress(done, chunks.length);
+      return result;
+    } catch {
+      // One chunk the provider could not finish: return it unchanged
+      // and count it, instead of failing the whole document.
+      failedChunks += 1;
+      failedParagraphs += chunk.text.split(/\n\s*\n/).filter(Boolean).length;
+      done += 1;
+      if (onProgress) await onProgress(done, chunks.length);
+      return chunk.text;
+    }
   });
-  return refined.join("\n\n");
+  return { text: refined.join("\n\n"), failedChunks, failedParagraphs };
 }
 
 function refinedFilename(original: string, format: DocFormat): string {
@@ -312,8 +370,17 @@ export async function processDocumentJob(
         progress: 35 + Math.round((60 * done) / total),
       });
     };
-    const refineFn = (texts: string[]) =>
-      refineParagraphTexts(provider, system, texts, timeoutMs, refineProgress("Refining batch"));
+    // Batches/chunks the provider could not finish accumulate here, so
+    // the report can say honestly which paragraphs came back unchanged
+    // instead of counting them as refined (see the warning below).
+    let failedBatches = 0;
+    let failedParagraphs = 0;
+    const refineFn = async (texts: string[]): Promise<string[]> => {
+      const r = await refineParagraphTexts(provider, system, texts, timeoutMs, refineProgress("Refining batch"));
+      failedBatches += r.failedBatches;
+      failedParagraphs += r.failedParagraphs;
+      return r.texts;
+    };
 
     if (format === "docx") {
       const analysis = await analyseDocx(originalBytes);
@@ -325,8 +392,8 @@ export async function processDocumentJob(
       const refinedAnalysis = await analyseDocx(refinedBytes);
       report = {
         originalWords: analysis.totalWords, refinedWords: refinedAnalysis.totalWords,
-        paragraphsTotal: analysis.paragraphs.length, paragraphsRefined: result.refined,
-        paragraphsProtected: result.protected, paragraphsSkipped: result.skipped,
+        paragraphsTotal: analysis.paragraphs.length, paragraphsRefined: result.refined - failedParagraphs,
+        paragraphsProtected: result.protected, paragraphsSkipped: result.skipped + failedParagraphs,
         chapters: analysis.chapters.map((c) => ({ level: c.level, title: c.title, kind: c.kind })),
         protectedCounts: analysis.protectedCounts, limitations, warnings,
         injectionSpans: [], scannedPdf: false,
@@ -341,8 +408,8 @@ export async function processDocumentJob(
       const refinedAnalysis = await analyseOdt(refinedBytes);
       report = {
         originalWords: analysis.totalWords, refinedWords: refinedAnalysis.totalWords,
-        paragraphsTotal: analysis.paragraphs.length, paragraphsRefined: result.refined,
-        paragraphsProtected: result.protected, paragraphsSkipped: result.skipped,
+        paragraphsTotal: analysis.paragraphs.length, paragraphsRefined: result.refined - failedParagraphs,
+        paragraphsProtected: result.protected, paragraphsSkipped: result.skipped + failedParagraphs,
         chapters: analysis.chapters.map((c) => ({ level: c.level, title: c.title, kind: c.kind })),
         protectedCounts: analysis.protectedCounts, limitations, warnings,
         injectionSpans: [], scannedPdf: false,
@@ -352,13 +419,16 @@ export async function processDocumentJob(
       fullTextForInjection = text;
       const paras = text.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean);
       await store.update(job.id, { status: "refining", stage: `Refining ${paras.length} paragraphs`, progress: 35 });
-      const refined = await refineParagraphTexts(provider, system, paras, timeoutMs, refineProgress("Refining batch"));
+      const r = await refineParagraphTexts(provider, system, paras, timeoutMs, refineProgress("Refining batch"));
+      failedBatches += r.failedBatches;
+      failedParagraphs += r.failedParagraphs;
+      const refined = r.texts;
       const refinedText = refined.join("\n\n");
       refinedBytes = new TextEncoder().encode(refinedText);
       report = {
         originalWords: countWords(text), refinedWords: countWords(refinedText),
-        paragraphsTotal: paras.length, paragraphsRefined: paras.length,
-        paragraphsProtected: 0, paragraphsSkipped: 0,
+        paragraphsTotal: paras.length, paragraphsRefined: paras.length - failedParagraphs,
+        paragraphsProtected: 0, paragraphsSkipped: failedParagraphs,
         chapters: [], protectedCounts: {}, limitations, warnings,
         injectionSpans: [], scannedPdf: false,
       };
@@ -369,7 +439,10 @@ export async function processDocumentJob(
       fullTextForInjection = paras.join("\n");
       const nonEmpty = paras.map((t, i) => ({ t, i })).filter((x) => x.t.trim());
       await store.update(job.id, { status: "refining", stage: `Refining ${nonEmpty.length} paragraphs`, progress: 35 });
-      const refined = await refineParagraphTexts(provider, system, nonEmpty.map((x) => x.t), timeoutMs, refineProgress("Refining batch"));
+      const r = await refineParagraphTexts(provider, system, nonEmpty.map((x) => x.t), timeoutMs, refineProgress("Refining batch"));
+      failedBatches += r.failedBatches;
+      failedParagraphs += r.failedParagraphs;
+      const refined = r.texts;
       nonEmpty.forEach((x, j) => {
         const runs = doc.paragraphs[x.i]?.runs ?? [];
         const first = runs.find((r) => r.text);
@@ -381,8 +454,8 @@ export async function processDocumentJob(
       limitations.push(RTF_LIMITATION);
       report = {
         originalWords: countWords(rtfToText(doc)), refinedWords: countWords(refined.join(" ")),
-        paragraphsTotal: paras.length, paragraphsRefined: nonEmpty.length,
-        paragraphsProtected: 0, paragraphsSkipped: paras.length - nonEmpty.length,
+        paragraphsTotal: paras.length, paragraphsRefined: nonEmpty.length - failedParagraphs,
+        paragraphsProtected: 0, paragraphsSkipped: paras.length - nonEmpty.length + failedParagraphs,
         chapters: [], protectedCounts: {}, limitations, warnings,
         injectionSpans: [], scannedPdf: false,
       };
@@ -402,18 +475,28 @@ export async function processDocumentJob(
         "PDF layout is not preserved: Proseforge extracted the PDF's text layer, refined the text, and returns it as a plain-text file. The original PDF is kept unchanged and remains downloadable from the report. Tables, figures, and page layout from the PDF are not carried into the refined text file.",
       );
       await store.update(job.id, { status: "refining", stage: `Refining extracted text (${extracted.pageCount} pages)`, progress: 35 });
-      const refinedText = await refineLongText(provider, system, extracted.text, timeoutMs, refineProgress("Refining chunk"));
+      const r = await refineLongText(provider, system, extracted.text, timeoutMs, refineProgress("Refining chunk"));
+      failedBatches += r.failedChunks;
+      failedParagraphs += r.failedParagraphs;
+      const refinedText = r.text;
       refinedBytes = new TextEncoder().encode(refinedText);
       outFilename = refinedFilename(job.originalFilename, "pdf");
+      const pdfParas = extracted.text.split(/\n\s*\n/).filter(Boolean).length;
       report = {
         originalWords: countWords(extracted.text), refinedWords: countWords(refinedText),
-        paragraphsTotal: extracted.text.split(/\n\s*\n/).filter(Boolean).length, paragraphsRefined: 0,
-        paragraphsProtected: 0, paragraphsSkipped: 0,
+        paragraphsTotal: pdfParas, paragraphsRefined: pdfParas - failedParagraphs,
+        paragraphsProtected: 0, paragraphsSkipped: failedParagraphs,
         chapters: [], protectedCounts: {}, limitations, warnings,
         injectionSpans: [], scannedPdf: false,
       };
-      // PDF has no paragraph structure to count: report refined words instead.
-      report.paragraphsRefined = report.paragraphsTotal;
+    }
+
+    // Batches/chunks the provider could not finish in time came back
+    // unchanged: say so in the report, so the counts above never present
+    // unrefined paragraphs as refined.
+    if (failedBatches > 0) {
+      const unit = format === "pdf" ? "text chunk(s)" : "paragraph batch(es)";
+      warnings.push(`${failedBatches} ${unit} could not be refined in time and were returned unchanged — retry the document or split it into smaller parts.`);
     }
 
     // Prompt-injection spans are flagged in the report, never silently edited.
