@@ -4,7 +4,7 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-11-19",
   "compatibility_flags": ["nodejs_compat"],
-  "assets": { "directory": "./public", "not_found_handling": "single-page-application" },
+  "assets": { "directory": "./public", "binding": "ASSETS", "not_found_handling": "single-page-application" },
   "ai": { "binding": "AI" },
   "r2_buckets": [{ "binding": "DOCS_BUCKET", "bucket_name": "proseforge-docs" }],
   "d1_databases": [{ "binding": "DB", "database_name": "proseforge-db", "database_id": "REPLACE_WITH_REAL_ID_AFTER_CREATION", "migrations_dir": "migrations" }],
