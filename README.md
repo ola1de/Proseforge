@@ -14,7 +14,7 @@ No login. No account. Text is processed in memory and never stored; uploaded doc
 - **Academic Assistant** — abstract, introduction, problem statement, objectives, questions, hypotheses, methodology, results, discussion, conclusion, recommendations; unsupported factual claims are flagged for verification, never given invented citations.
 - **Writing Constructor** — three alternative constructions of any sentence or idea, side by side.
 - **Writing Analysis** — readability, vocabulary diversity, repetition, sentence variation, tone, and more, computed locally and honestly labelled as editorial indicators, not scientifically validated scores, with before/after comparison.
-- **Research Document** — plain-text (.txt) upload works now; DOCX/PDF/RTF/ODT processing with structural preservation arrives in Milestone 2 (see `docs/03-roadmap.md`).
+- **Research Document** — whole dissertations and theses: DOCX and ODT with structural preservation, RTF, TXT, and text-layer PDF (see `docs/03-roadmap.md` for the honest limits on PDF layout and scanned PDFs).
 - **Privacy by design** — no accounts, no public document URLs, security headers/CSP, rate limiting, request-size limits, and a 48-hour server-side deletion mechanism (scheduled cleanup + storage lifecycle backstop).
 
 ## AI provider — Workers AI is the only required provider
@@ -27,7 +27,7 @@ An **optional** OpenAI-compatible adapter exists in `src/providers.ts` for opera
 
 ```bash
 npm install
-npm test          # 50 tests, must pass
+npm test          # 78 tests, must pass
 npm run build     # typecheck + asset check
 npx wrangler dev  # local dev at http://localhost:8787
 npx wrangler deploy
@@ -41,8 +41,9 @@ Full deployment instructions: [`docs/DEPLOYMENT.md`](../docs/DEPLOYMENT.md). Arc
 proseforge-platform/
   public/        # Frontend: index.html, styles.css, app.js (vanilla JS SPA, hash-routed)
   src/           # Worker: index.ts (API), modes.ts, prompts.ts, providers.ts,
-                 #   analysis.ts, chunking.ts, security.ts, types.ts
-  tests/         # Vitest suite (50 tests)
+                 #   analysis.ts, chunking.ts, security.ts, types.ts,
+                 #   docx.ts, odt.ts, pdf.ts, rtf.ts, documents.ts, store.ts
+  tests/         # Vitest suite (78 tests, incl. real DOCX/ODT fixtures)
   migrations/    # D1 schema for Milestone 2 job metadata (no document content, ever)
   scripts/       # build-check
   wrangler.jsonc # Workers config: ai binding, R2 + D1 + Queues (M2), hourly cleanup cron
@@ -58,7 +59,11 @@ proseforge-platform/
 | `/api/academic` | POST | `{ text, section, discipline? }` — 11 sections |
 | `/api/construct` | POST | `{ text, discipline? }` — 3 alternatives |
 | `/api/analyse` | POST | `{ text, refinedText? }` — local, no AI call |
-| `/api/documents/*` | — | HTTP 501 until Milestone 2 |
+| `/api/documents/upload` | POST | Multipart upload → 202 + job id; processing runs in the background |
+| `/api/documents/:id/status` | GET | Progress, stage, summary, fresh 15-minute download token when done |
+| `/api/documents/:id/report` | GET | Full processing report (chapters, counts, limitations, warnings) |
+| `/api/documents/:id/download?token=…` | GET | Refined document (`kind=refined`) or original (`kind=original`) |
+| `/api/documents/:id/retry` | POST | Re-run a `needs-provider` or `failed` job |
 
 ## Contributing / Security / Privacy
 
