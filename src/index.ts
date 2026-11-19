@@ -4,6 +4,7 @@
 // Uploaded documents live in private R2 (or in-memory locally) and are
 // deleted by the scheduled cleanup 48 hours after upload.
 import { analyseText, flagUnsupportedClaims } from "./analysis";
+import { checkText, MIN_WORDS_FOR_VERDICT } from "./checker";
 import { splitIntoChunks, terminologyNote, countWords } from "./chunking";
 import { ACADEMIC_SECTIONS, buildAcademicPrompt, buildConstructPrompt, buildSystemPrompt } from "./prompts";
 import { DISCIPLINES, MODES, INTENSITIES, findIntensity, findMode } from "./modes";
@@ -136,6 +137,9 @@ export async function handleApi(req: Request, env: Env, url: URL, waitUntil?: (p
       intensities: INTENSITIES, disciplines: DISCIPLINES,
       academicSections: Object.entries(ACADEMIC_SECTIONS).map(([id, s]) => ({ id, label: s.label })),
       documentsAvailable: true,
+      checkerAvailable: true,
+      checkerMinWords: MIN_WORDS_FOR_VERDICT,
+      checkerNote: "The AI Checker is a local, transparent multi-signal indicator — not proof. It works with no AI provider configured.",
       documentsNote: "Document upload and processing are available. DOCX/ODT preserve structure; PDF returns refined text (layout is not rebuilt); scanned PDFs cannot be OCRed in a Worker.",
       documentFormats: Object.entries(SUPPORTED_FORMATS).map(([id, f]) => ({ id, label: f.label, mime: f.mime })),
       maxDocBytes: maxDocBytes(env),
@@ -167,6 +171,15 @@ export async function handleApi(req: Request, env: Env, url: URL, waitUntil?: (p
       ...(refined ? { refined: analyseText(refined) } : {}),
       note: "These are transparent editorial indicators computed from the text itself. They are not scientifically validated scores.",
     }, 200, cors);
+  }
+
+  // POST /api/check — AI Checker (Milestone 6). Local and deterministic:
+  // no AI provider is needed and no text is stored. Same text-size limit
+  // and per-IP rate limiting as /api/refine.
+  if (path === "/api/check") {
+    const v = validateText(body.value.text, env);
+    if (!v.ok) return v.response;
+    return json(checkText(v.text), 200, cors);
   }
 
   if (path === "/api/refine") {
