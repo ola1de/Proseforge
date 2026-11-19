@@ -43,36 +43,40 @@ function para(marker: string, repeats: number): string {
 
 describe("parallel paragraph batches", () => {
   it("runs batches concurrently, preserves paragraph order, and reports progress per batch", async () => {
-    const texts = Array.from({ length: 30 }, (_, i) => para(`Para${i}.`, 2)); // 30 short paras -> 3 batches of 12/12/6
+    const texts = Array.from({ length: 30 }, (_, i) => para(`Para${i}.`, 2)); // 30 short paras -> 4 batches of 8/8/8/6
     const { provider, stats } = trackingProvider(fakeRefineProvider, 30);
     const progress: { done: number; total: number }[] = [];
-    const out = await refineParagraphTexts(provider, SYSTEM, texts, 5000, (done, total) => {
+    const { texts: out, failedBatches, failedParagraphs } = await refineParagraphTexts(provider, SYSTEM, texts, 5000, (done, total) => {
       progress.push({ done, total });
     });
     // Batches overlapped instead of running one after another.
     expect(stats.maxActive).toBeGreaterThan(1);
-    expect(stats.calls).toBe(3); // one call per batch, no per-paragraph fallback
+    expect(stats.calls).toBe(4); // one call per batch, no per-paragraph fallback
+    expect(failedBatches).toBe(0);
+    expect(failedParagraphs).toBe(0);
     // Every paragraph came back in its original position.
     expect(out.length).toBe(30);
     out.forEach((r, i) => expect(r).toBe(`Refined: ${texts[i]?.trim()}`));
     // Progress fired exactly once per completed batch.
-    expect(progress.length).toBe(3);
-    expect(progress.map((p) => p.total)).toEqual([3, 3, 3]);
-    expect(progress.map((p) => p.done).sort((a, b) => a - b)).toEqual([1, 2, 3]);
+    expect(progress.length).toBe(4);
+    expect(progress.map((p) => p.total)).toEqual([4, 4, 4, 4]);
+    expect(progress.map((p) => p.done).sort((a, b) => a - b)).toEqual([1, 2, 3, 4]);
   });
 });
 
 describe("parallel long-text chunks", () => {
   it("runs chunks concurrently and keeps their order", async () => {
-    // 5 paragraphs of ~600 words each -> 3 chunks ([0,1], [2,3], [4]).
+    // 5 paragraphs of ~600 words each -> 5 chunks (one per paragraph at
+    // the 800-word default; two would not fit in a chunk together).
     const text = [0, 1, 2, 3, 4].map((i) => para(`MARKER${i}`, 30)).join("\n\n");
     const { provider, stats } = trackingProvider(fakeRefineProvider, 30);
     const progress: { done: number; total: number }[] = [];
-    const out = await refineLongText(provider, SYSTEM, text, 5000, (done, total) => {
+    const { text: out, failedChunks } = await refineLongText(provider, SYSTEM, text, 5000, (done, total) => {
       progress.push({ done, total });
     });
     expect(stats.maxActive).toBeGreaterThan(1);
-    expect(stats.calls).toBe(3);
+    expect(stats.calls).toBe(5);
+    expect(failedChunks).toBe(0);
     // Chunk order preserved in the joined output.
     const i0 = out.indexOf("MARKER0");
     const i2 = out.indexOf("MARKER2");
@@ -80,8 +84,8 @@ describe("parallel long-text chunks", () => {
     expect(i0).toBeGreaterThanOrEqual(0);
     expect(i2).toBeGreaterThan(i0);
     expect(i4).toBeGreaterThan(i2);
-    expect(progress.length).toBe(3);
-    expect(progress.map((p) => p.total)).toEqual([3, 3, 3]);
+    expect(progress.length).toBe(5);
+    expect(progress.map((p) => p.total)).toEqual([5, 5, 5, 5, 5]);
   });
 });
 
