@@ -9,7 +9,7 @@ import { ACADEMIC_SECTIONS, buildAcademicPrompt, buildConstructPrompt, buildSyst
 import { DISCIPLINES, MODES, INTENSITIES, findIntensity, findMode } from "./modes";
 import { PROVIDER_NOT_CONFIGURED_SETUP, getModel, resolveProvider, resolveProviderKind, type AIProvider } from "./providers";
 import { RateLimiter, applySecurityHeaders, clientIp, corsHeaders, sanitiseFilename } from "./security";
-import { MAX_DOC_BYTES_DEFAULT, SUPPORTED_FORMATS, checkZipExpandedSize, processDocumentJob, publicJobView, validateUpload, type DocFormat, type ProcessOptions } from "./documents";
+import { MAX_DOC_BYTES_DEFAULT, SUPPORTED_FORMATS, checkZipExpandedSize, mapWithConcurrency, processDocumentJob, publicJobView, validateUpload, type DocFormat, type ProcessOptions } from "./documents";
 import { hashToken, newDownloadToken, newJobId, purgeExpiredJobs, resolveJobStore, type JobRecord } from "./store";
 import type { ApiErrorBody, Env, Intensity } from "./types";
 
@@ -106,16 +106,19 @@ function providerErrorResponse(e: unknown): Response {
 
 async function refineWithChunks(provider: AIProvider, env: Env, text: string, system: string): Promise<string> {
   const chunks = splitIntoChunks(text);
-  const out: string[] = [];
-  let seen = "";
-  for (const chunk of chunks) {
-    const context = seen ? `${terminologyNote(seen)}\n\n` : "";
-    const user = `${context}${chunk.overlap && chunk.index > 0 ? `Previous paragraph (for context only, do not repeat it): ${chunk.overlap}\n\n` : ""}Refine the following text:\n\n${chunk.text}`;
-    const refined = await provider.complete({ system, user, maxTokens: 4096, timeoutMs: timeoutMs(env) });
-    out.push(refined);
-    seen += `\n${chunk.text}`;
-  }
-  return out.join("\n\n");
+  if (chunks.length === 0) return "";
+  // The terminology note is computed once from the whole text up front
+  // and shared by every chunk — there is no running "seen" state, so
+  // chunks can run CONCURRENTLY (up to 4 in flight) instead of one after
+  // another. Results are joined in chunk order, so the refined text
+  // keeps the original order. Each chunk keeps its own overlap context.
+  const note = terminologyNote(text);
+  const contextPrefix = note ? `${note}\n\n` : "";
+  const refined = await mapWithConcurrency(chunks, 4, (chunk) => {
+    const user = `${contextPrefix}${chunk.overlap && chunk.index > 0 ? `Previous paragraph (for context only, do not repeat it): ${chunk.overlap}\n\n` : ""}Refine the following text:\n\n${chunk.text}`;
+    return provider.complete({ system, user, maxTokens: 4096, timeoutMs: timeoutMs(env) });
+  });
+  return refined.join("\n\n");
 }
 
 export async function handleApi(req: Request, env: Env, url: URL, waitUntil?: (p: Promise<unknown>) => void): Promise<Response> {
@@ -271,9 +274,15 @@ async function handleDocuments(req: Request, env: Env, url: URL, waitUntil?: (p:
   if (!job) return err("NOT_FOUND", "No document job with that id. It may have been deleted after 48 hours.", 404);
   if (job.status === "deleted") return err("GONE", "This document was deleted 48 hours after upload, as stated in the privacy policy. Please upload it again.", 410);
 
-  // POST /api/documents/:id/retry — re-run a needs-provider or failed job.
+  // POST /api/documents/:id/retry — re-run a needs-provider, failed, or
+  // STUCK job. A job stuck in uploaded/analysing/refining (for example
+  // because the background task died without marking it failed) can be
+  // retried from here: the job is reset and processing is kicked off
+  // again. If the old background task is somehow still alive, both runs
+  // refine the same document and the last complete write wins.
   if (sub === "retry" && req.method === "POST") {
-    if (job.status !== "needs-provider" && job.status !== "failed") {
+    const retryable = ["needs-provider", "failed", "uploaded", "analysing", "refining"];
+    if (!retryable.includes(job.status)) {
       return err("BAD_REQUEST", `Job is ${job.status} and cannot be retried.`, 400);
     }
     const opts: ProcessOptions = { mode: "academic", intensity: "balanced", discipline: "General", protectCitations: true, protectTables: true };
