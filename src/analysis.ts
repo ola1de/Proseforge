@@ -14,7 +14,7 @@ export interface Analysis {
 }
 
 const FILLERS = ["very", "really", "just", "actually", "basically", "literally", "in fact", "of course", "needless to say", "it is important to note", "as a matter of fact"];
-const TRANSITIONS = ["however", "therefore", "moreover", "furthermore", "consequently", "nevertheless", "in addition", "in contrast", "for example", "for instance", "in conclusion", "meanwhile", "similarly", "although", "despite", "thus", "hence", "accordingly"];
+export const TRANSITIONS = ["however", "therefore", "moreover", "furthermore", "consequently", "nevertheless", "in addition", "in contrast", "for example", "for instance", "in conclusion", "meanwhile", "similarly", "although", "despite", "thus", "hence", "accordingly"];
 const FORMAL_WORDS = ["therefore", "furthermore", "moreover", "consequently", "notwithstanding", "henceforth", "utilise", "utilize", "demonstrate", "establish", "furthermore"];
 const STOP = new Set("the a an and or of to in on for with is are was were be been it its this that these those as at by from not but we our their his her they he she you i am has have had will would can could should may might do does did".split(" "));
 
