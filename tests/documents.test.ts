@@ -25,8 +25,10 @@ describe("ODT round-trip", () => {
   it("refines body paragraphs and keeps protected text identical", async () => {
     const original = await buildSampleOdt();
     const before = await analyseOdt(original);
-    const result = await refineOdt(original, (texts) =>
-      refineParagraphTexts(fakeRefineProvider, buildSystemPrompt({ modeId: "academic", intensity: "balanced" }), texts, 5000));
+    const result = await refineOdt(original, async (texts) => {
+      const r = await refineParagraphTexts(fakeRefineProvider, buildSystemPrompt({ modeId: "academic", intensity: "balanced" }), texts, 5000);
+      return r.texts;
+    });
     expect(result.validation.valid).toBe(true);
     expect(result.validation.issues).toEqual([]);
     const after = await analyseOdt(result.bytes);
