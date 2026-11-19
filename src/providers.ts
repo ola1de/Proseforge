@@ -56,6 +56,9 @@ export class WorkersAIProvider implements AIProvider {
             { role: "user", content: opts.user },
           ],
           max_tokens: opts.maxTokens,
+          // Steadier, more faithful output (matches the OpenAI-compatible
+          // adapter). Without this the model drifts toward showier wording.
+          temperature: 0.3,
         }) as Promise<unknown>,
         new Promise<never>((_, reject) => {
           signal.addEventListener("abort", () => reject(Object.assign(new Error("AI request timed out"), { code: "AI_TIMEOUT" })), { once: true });
