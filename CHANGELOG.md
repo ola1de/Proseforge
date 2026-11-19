@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.7.0 — 2026-11-19 (Milestone 7 — long texts must not time out)
+
+- Why: Milestone 4 parallelised the calls, but long texts still failed live — a 4,953-word text timed out after 60 seconds, and even a single 879-word chunk took 53.7 seconds. The cause is slow per-call generation on the small model, not the sequencing: each call can take 15–55 seconds and varies a lot, and the old fixed 60-second timeout plus fixed 4096 output tokens meant one slow chunk killed the whole request.
+- Smaller work units: text chunks are now at most 800 words (was 1500) and document batches at most 800 words / 8 paragraphs (was 1500 / 12). Shorter model outputs per call finish faster.
+- Adaptive output cap: maxTokens is now derived from the input size — min(4096, max(768, input words × 2)) — instead of a fixed 4096 everywhere, so the model can no longer ramble to 4096 tokens on a short input.
+- Longer default timeout: per-call AI timeout 60s → 90s (config default in code and in `wrangler.jsonc` `AI_TIMEOUT_MS`). The client-side 180s timeout is unchanged.
+- Partial results instead of total failure: if one chunk or batch still cannot finish in time, it falls back to its ORIGINAL text and the rest of the request completes. `/api/refine` and `/api/academic` then report `partial: true` with `failedChunks: [indexes]`; document jobs record the failed batch count in the report warnings and do not count those paragraphs as refined (they move to "skipped"). Unrefined text is never presented as refined.
+- No more silent grind inside a batch: the per-paragraph retry after a failed batch call now runs concurrently (up to 4 in flight) instead of one paragraph after another. A live retest showed why this matters — a job sat at "batch 3 of 4, 80%" for 3+ minutes because a sequential retry of up to 12 paragraphs, each with the full per-call timeout, can take many minutes with no progress update in between. The retry is now bounded to about two waves of calls.
+- Timeout race proven, not assumed: a test pins that a Workers AI binding whose `run()` never settles still makes `complete()` reject with `AI_TIMEOUT` at the timeout. A job that fails every batch still completes as "done" (original text returned, failure recorded, nothing counted as refined) instead of failing the job — the `jobs.test.ts` "never puts document content in failure messages" test was updated to assert exactly that.
+- 12 new tests (partial chunk/batch fallback, partial `/api/refine` response, adaptive maxTokens capture, document job with a failing batch completing to "done" with the warning, smaller-chunk defaults, timeout race); 113 Vitest tests passing; TypeScript clean.
+- Honest limit: live AI speed cannot be measured from local development (local dev cannot reach Workers AI), so no speedup numbers are claimed here. The changes above reduce the per-call work and stop one slow call from failing the whole request; the live check after deploy is still the proof.
+
 ## 0.6.0 — 2026-11-19 (Milestone 6 — AI Checker)
 
 - New AI Checker workspace (`#/checker`, nav item "Checker"): paste any text and see whether it reads as AI-generated or human. Built entirely from local, deterministic statistical signals — no external detector API, no key, no model call, no stored text.
