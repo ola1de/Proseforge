@@ -17,6 +17,57 @@ const state = {
 
 const SAMPLE_ORIGINAL = "In today's fast-paced world, it is very important to note that effective communication is very crucial for success. Moreover, it is a well-known fact that many people struggle with writing. This is due to the fact that writing is a very difficult task. In conclusion, it is important to improve writing skills in order to achieve success in today's world.";
 
+/* Hand-written "after" version of the sample, for the hero visual only.
+   It was written by hand to show the style of improvement — it is labelled as an
+   illustrative example on the page and is never presented as live AI output. */
+const HERO_AFTER = "Clear communication is essential to success, yet many people find writing difficult. The challenge is rarely a lack of ideas — it is turning them into sentences that hold a reader's attention. Word choice, rhythm, and structure are the craft, and they can be practised like any other skill.";
+const FILLERS = ["In today's fast-paced world, it is very important to note that", "Moreover, it is a well-known fact that", "This is due to the fact that", "In conclusion, it is important to"];
+function highlightFillers(text) {
+  let out = esc(text);
+  for (const f of FILLERS) out = out.split(esc(f)).join(`<mark class="hl">${esc(f)}</mark>`);
+  return out;
+}
+
+/* ---------------- Inline SVG icon set (hand-written, feather-style) ---------------- */
+const ICONS = {
+  home: '<path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>',
+  pen: '<path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>',
+  fileText: '<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/>',
+  book: '<path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/>',
+  layers: '<polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/>',
+  chart: '<line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>',
+  info: '<circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>',
+  shield: '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>',
+  copy: '<rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>',
+  download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>',
+  trash: '<polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
+  undo: '<polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/>',
+  redo: '<polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>',
+  upload: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>',
+  check: '<polyline points="20 6 9 17 4 12"/>',
+  checkCircle: '<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>',
+  lock: '<rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
+  clock: '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',
+  zap: '<polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>',
+  arrowRight: '<line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>',
+  alert: '<path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>',
+  xCircle: '<circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/>',
+  search: '<circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>',
+  refresh: '<polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>',
+  eye: '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>',
+  file: '<path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/>',
+};
+function icon(name, label) {
+  const inner = ICONS[name] || "";
+  const aria = label ? ` role="img" aria-label="${esc(label)}"` : ' aria-hidden="true"';
+  return `<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" focusable="false"${aria}>${inner}</svg>`;
+}
+/* Set a button's visible label without wiping its inline icon (labels live in .btn-text). */
+function setBtnLabel(btn, text) {
+  const span = btn.querySelector(".btn-text");
+  if (span) span.textContent = text; else btn.textContent = text;
+}
+
 async function api(path, body) {
   const res = await fetch(path, {
     method: "POST",
@@ -34,7 +85,8 @@ function counts(text) {
 }
 
 function statusHtml(kind, message) {
-  return `<div class="status show ${kind}" role="status">${esc(message)}</div>`;
+  const ic = kind === "error" ? "xCircle" : kind === "warn" ? "alert" : "checkCircle";
+  return `<div class="status show ${kind}" role="status">${icon(ic)}<span>${esc(message)}</span></div>`;
 }
 
 function providerBanner() {
@@ -85,9 +137,26 @@ function renderHome() {
     <h1>Write like a human.<br>Read like a pro.</h1>
     <p class="lede">Proseforge turns robotic, repetitive, unnatural writing into natural, sophisticated, genuinely readable prose — from a single paragraph to an entire dissertation. No login. No account.</p>
     <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
-      <a class="btn btn-accent" href="#/humanise">Refine text — free</a>
-      <a class="btn" href="#/research">Refine a research document</a>
+      <a class="btn btn-accent" href="#/humanise">${icon("zap")}<span class="btn-text">Refine text — free</span></a>
+      <a class="btn" href="#/research">${icon("fileText")}<span class="btn-text">Refine a research document</span></a>
     </div>
+    <div class="chips" aria-label="Key facts">
+      <span class="chip">${icon("lock")} No login</span>
+      <span class="chip">${icon("clock")} Deleted after 48 hours</span>
+      <span class="chip">${icon("zap")} Powered by Cloudflare Workers AI</span>
+    </div>
+  </section>
+  <section class="hero-visual" aria-label="Before and after example">
+    <div class="hv-panel hv-before">
+      <div class="hv-head"><span class="badge">Before</span><span class="hv-note">Robotic, filler-heavy</span></div>
+      <p>${highlightFillers(SAMPLE_ORIGINAL)}</p>
+    </div>
+    <div class="hv-arrow" aria-hidden="true">${icon("arrowRight", "becomes")}</div>
+    <div class="hv-panel hv-after">
+      <div class="hv-head"><span class="badge teal">After</span><span class="hv-note">Natural, direct</span></div>
+      <p>${esc(HERO_AFTER)}</p>
+    </div>
+    <p class="hv-caption small muted">Illustrative example — the “after” text was written by hand to show the style of improvement. Live refinement happens in the workspace below.</p>
   </section>
   ${providerBanner()}
   <section class="section" style="padding-top:16px">
@@ -97,12 +166,12 @@ function renderHome() {
       <div class="toolbar">
         <div class="field"><label for="home-mode">Refinement mode</label><select id="home-mode">${modeOptions("natural")}</select></div>
         <div class="field"><label for="home-discipline">Discipline</label><select id="home-discipline">${disciplineOptions("General")}</select></div>
-        <button class="btn btn-primary" id="home-refine">Refine this text</button>
+        <button class="btn btn-primary" id="home-refine">${icon("zap")}<span class="btn-text">Refine this text</span></button>
       </div>
       <div class="panels">
         <div class="panel"><div class="panel-head"><span>Original</span><span class="muted" id="home-counts">0 words · 0 characters</span></div>
           <div class="panel-body"><textarea id="home-input" rows="8" placeholder="Paste your paragraph here…">${esc(SAMPLE_ORIGINAL)}</textarea></div></div>
-        <div class="panel"><div class="panel-head"><span>Refined</span><button class="btn btn-sm btn-ghost" id="home-copy" disabled>Copy</button></div>
+        <div class="panel"><div class="panel-head"><span>Refined</span><button class="btn btn-sm btn-ghost" id="home-copy" disabled>${icon("copy")}<span class="btn-text">Copy</span></button></div>
           <div class="panel-body"><div class="readonly placeholder" id="home-output">Your refined text will appear here.</div></div></div>
       </div>
       <div id="home-status"></div>
@@ -115,7 +184,7 @@ function renderHome() {
       <div><div class="badge">Original</div><div class="demo-orig" style="margin-top:8px">${esc(SAMPLE_ORIGINAL)}</div></div>
       <div><div class="badge teal">Refined — live</div><div class="demo-ref" style="margin-top:8px" id="demo-refined">Press “Refine this sample” to see a live refinement.</div></div>
     </div>
-    <div style="margin-top:14px"><button class="btn" id="demo-refine">Refine this sample</button></div>
+    <div style="margin-top:14px"><button class="btn" id="demo-refine">${icon("zap")}<span class="btn-text">Refine this sample</span></button></div>
     <div id="demo-status"></div>
   </section>
   <section class="section alt">
@@ -123,12 +192,12 @@ function renderHome() {
     <h2>What Proseforge does</h2>
     <p class="sub">Not a synonym swapper. The engine reads the whole passage, then improves sentence construction, vocabulary, transitions, and terminology — while preserving your meaning, facts, and voice.</p>
     <div class="grid grid-3">
-      <div class="card"><h3>Humanise Text</h3><p>Ten refinement modes — Natural, Academic, Advanced Academic, Professional, Conversational, Technical, Concise, Expanded, Formal, and your own Custom Voice — with three intensities.</p></div>
-      <div class="card"><h3>Research Documents</h3><p>Whole dissertations and theses, refined section by section with formatting preserved. DOCX, ODT, RTF, TXT, and text-layer PDF supported.</p></div>
-      <div class="card"><h3>Academic Assistant</h3><p>Abstracts, introductions, problem statements, objectives, methodology, results, discussion, conclusions, and recommendations — with unsupported claims flagged, never invented.</p></div>
-      <div class="card"><h3>Writing Constructor</h3><p>Turn a basic sentence or a pile of ideas into well-constructed writing, with three alternative constructions to compare.</p></div>
-      <div class="card"><h3>Writing Analysis</h3><p>Readability, vocabulary diversity, repetition, sentence variation, and tone — transparent editorial indicators, honestly labelled, before and after.</p></div>
-      <div class="card"><h3>Private by design</h3><p>No login, no email, no profiles. Text is never stored. Uploaded documents are deleted automatically after 48 hours.</p></div>
+      <div class="card feature"><div class="icon-tile">${icon("pen")}</div><h3>Humanise Text</h3><p>Ten refinement modes — Natural, Academic, Advanced Academic, Professional, Conversational, Technical, Concise, Expanded, Formal, and your own Custom Voice — with three intensities.</p><a class="feature-link" href="#/humanise">Refine text ${icon("arrowRight")}</a></div>
+      <div class="card feature"><div class="icon-tile">${icon("fileText")}</div><h3>Research Documents</h3><p>Whole dissertations and theses, refined section by section with formatting preserved. DOCX, ODT, RTF, TXT, and text-layer PDF supported.</p><a class="feature-link" href="#/research">Refine a document ${icon("arrowRight")}</a></div>
+      <div class="card feature"><div class="icon-tile">${icon("book")}</div><h3>Academic Assistant</h3><p>Abstracts, introductions, problem statements, objectives, methodology, results, discussion, conclusions, and recommendations — with unsupported claims flagged, never invented.</p><a class="feature-link" href="#/academic">Refine a section ${icon("arrowRight")}</a></div>
+      <div class="card feature"><div class="icon-tile">${icon("layers")}</div><h3>Writing Constructor</h3><p>Turn a basic sentence or a pile of ideas into well-constructed writing, with three alternative constructions to compare.</p><a class="feature-link" href="#/constructor">Build alternatives ${icon("arrowRight")}</a></div>
+      <div class="card feature"><div class="icon-tile">${icon("chart")}</div><h3>Writing Analysis</h3><p>Readability, vocabulary diversity, repetition, sentence variation, and tone — transparent editorial indicators, honestly labelled, before and after.</p><a class="feature-link" href="#/analysis">Analyse writing ${icon("arrowRight")}</a></div>
+      <div class="card feature"><div class="icon-tile">${icon("shield")}</div><h3>Private by design</h3><p>No login, no email, no profiles. Text is never stored. Uploaded documents are deleted automatically after 48 hours.</p><a class="feature-link" href="#/privacy">How privacy works ${icon("arrowRight")}</a></div>
     </div>
     </div>
   </section>
@@ -153,9 +222,9 @@ function renderHome() {
   const updateCounts = () => { const c = counts(input.value); countsEl.textContent = `${c.words.toLocaleString()} words · ${c.chars.toLocaleString()} characters`; };
   input.addEventListener("input", updateCounts); updateCounts();
   $("#home-refine").addEventListener("click", async () => {
-    const btn = $("#home-refine"); btn.disabled = true; btn.textContent = "Refining…";
+    const btn = $("#home-refine"); btn.disabled = true; setBtnLabel(btn, "Refining…");
     const r = await api("/api/refine", { text: input.value, mode: $("#home-mode").value, intensity: "balanced", discipline: $("#home-discipline").value });
-    btn.disabled = false; btn.textContent = "Refine this text";
+    btn.disabled = false; setBtnLabel(btn, "Refine this text");
     if (r.ok) {
       output.classList.remove("placeholder"); output.textContent = r.data.refined;
       state.lastRefined = r.data.refined; state.lastOriginal = input.value;
@@ -165,11 +234,11 @@ function renderHome() {
       $("#home-status").innerHTML = statusHtml("error", errorMessage(r));
     }
   });
-  $("#home-copy").addEventListener("click", async () => { await navigator.clipboard.writeText(output.textContent); $("#home-copy").textContent = "Copied"; setTimeout(() => { $("#home-copy").textContent = "Copy"; }, 1500); });
+  $("#home-copy").addEventListener("click", async () => { await navigator.clipboard.writeText(output.textContent); setBtnLabel($("#home-copy"), "Copied"); setTimeout(() => { setBtnLabel($("#home-copy"), "Copy"); }, 1500); });
   $("#demo-refine").addEventListener("click", async () => {
-    const btn = $("#demo-refine"); btn.disabled = true; btn.textContent = "Refining…";
+    const btn = $("#demo-refine"); btn.disabled = true; setBtnLabel(btn, "Refining…");
     const r = await api("/api/refine", { text: SAMPLE_ORIGINAL, mode: "natural", intensity: "balanced", discipline: "General" });
-    btn.disabled = false; btn.textContent = "Refine this sample";
+    btn.disabled = false; setBtnLabel(btn, "Refine this sample");
     if (r.ok) { $("#demo-refined").textContent = r.data.refined; $("#demo-status").innerHTML = ""; }
     else { $("#demo-status").innerHTML = statusHtml("warn", errorMessage(r)); }
   });
@@ -186,7 +255,7 @@ function errorMessage(r) {
 function renderHumanise() {
   view.innerHTML = `
   <section class="workspace">
-    <h1>Humanise Text</h1>
+    <h1 class="page-title">${icon("pen")} Humanise Text</h1>
     <p class="muted">Refine any text into natural, sophisticated prose. Meaning, facts, numbers, and citations are preserved; nothing is invented.</p>
     ${providerBanner()}
     <div class="toolbar">
@@ -198,14 +267,14 @@ function renderHumanise() {
     <div class="panels">
       <div class="panel"><div class="panel-head"><span>Original</span><span class="muted" id="h-counts">0 words · 0 characters</span></div>
         <div class="panel-body"><textarea id="h-input" rows="12" placeholder="Paste your text here…"></textarea></div></div>
-      <div class="panel"><div class="panel-head"><span>Refined</span><span><button class="btn btn-sm btn-ghost" id="h-copy" disabled>Copy</button> <button class="btn btn-sm btn-ghost" id="h-download" disabled>Download .txt</button></span></div>
+      <div class="panel"><div class="panel-head"><span>Refined</span><span><button class="btn btn-sm btn-ghost" id="h-copy" disabled>${icon("copy")}<span class="btn-text">Copy</span></button> <button class="btn btn-sm btn-ghost" id="h-download" disabled>${icon("download")}<span class="btn-text">Download .txt</span></button></span></div>
         <div class="panel-body"><div class="readonly placeholder" id="h-output">Your refined text will appear here.</div></div></div>
     </div>
     <div class="actions">
-      <button class="btn btn-accent" id="h-refine">Refine</button>
-      <button class="btn" id="h-undo" disabled>Undo</button>
-      <button class="btn" id="h-redo" disabled>Redo</button>
-      <button class="btn" id="h-clear">Clear</button>
+      <button class="btn btn-accent" id="h-refine">${icon("zap")}<span class="btn-text">Refine</span></button>
+      <button class="btn" id="h-undo" disabled>${icon("undo")}<span class="btn-text">Undo</span></button>
+      <button class="btn" id="h-redo" disabled>${icon("redo")}<span class="btn-text">Redo</span></button>
+      <button class="btn" id="h-clear">${icon("trash")}<span class="btn-text">Clear</span></button>
     </div>
     <div id="h-status"></div>
     <p class="small muted">Tip: long texts are processed in paragraph-sized chunks with terminology carried between chunks, so a long essay stays consistent. Limit: 100,000 characters per request.</p>
@@ -220,9 +289,9 @@ function renderHumanise() {
   $("#h-refine").addEventListener("click", async () => {
     if (!input.value.trim()) { $("#h-status").innerHTML = statusHtml("warn", "Paste some text first."); return; }
     pushUndo();
-    const btn = $("#h-refine"); btn.disabled = true; btn.textContent = "Refining…";
+    const btn = $("#h-refine"); btn.disabled = true; setBtnLabel(btn, "Refining…");
     const r = await api("/api/refine", { text: input.value, mode: $("#h-mode").value, intensity: $("#h-intensity").value, discipline: $("#h-discipline").value, customVoice: $("#h-voice").value });
-    btn.disabled = false; btn.textContent = "Refine";
+    btn.disabled = false; setBtnLabel(btn, "Refine");
     if (r.ok) {
       output.classList.remove("placeholder"); output.textContent = r.data.refined;
       state.lastRefined = r.data.refined; state.lastOriginal = input.value;
@@ -264,7 +333,7 @@ function renderResearch() {
 
   view.innerHTML = `
   <section class="workspace">
-    <h1>Research Document</h1>
+    <h1 class="page-title">${icon("fileText")} Research Document</h1>
     <p class="muted">Refine a whole dissertation, thesis, or journal manuscript — section by section, with your structure and formatting preserved. Tables, citations, equations, footnotes, and references are never rewritten.</p>
     ${providerBanner()}
     <div class="toolbar">
@@ -274,6 +343,7 @@ function renderResearch() {
       <div class="field" id="d-voice-field" style="display:none;flex:1;min-width:220px"><label for="d-voice">Custom voice — describe your preferred style</label><input type="text" id="d-voice" placeholder="e.g. Clear newspaper editorial, confident but plain"></div>
     </div>
     <div class="dropzone" id="dropzone" tabindex="0" role="button" aria-label="Upload a research document">
+      <div class="dz-icon">${icon("upload")}</div>
       <strong>Drag &amp; drop a document here, or click to browse</strong>
       <p class="small" style="margin:8px 0 0">.docx · .odt · .pdf · .rtf · .txt — up to ${(maxBytes / 1000000).toFixed(0)} MB · private temporary storage, deleted automatically 48 hours after upload</p>
       <input type="file" id="file-input" accept=".docx,.odt,.pdf,.rtf,.txt,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.oasis.opendocument.text,application/pdf,application/rtf,text/plain">
@@ -282,17 +352,17 @@ function renderResearch() {
     <div id="d-progress" style="margin-top:16px"></div>
     <div id="d-result" style="margin-top:16px"></div>
     <h2 style="margin-top:32px">How document refinement works</h2>
-    <ul class="clean">
-      <li><strong>1. Upload</strong> — DOCX, ODT, PDF, RTF, or TXT, validated by type and content (not just the file extension).</li>
-      <li><strong>2. Structure analysis</strong> — chapters, sections, tables, figures, equations, citations, and references are identified; protected content is marked and never rewritten.</li>
-      <li><strong>3. Section-by-section refinement</strong> — eligible paragraphs are refined in context-aware batches, with terminology kept consistent across chapters.</li>
-      <li><strong>4. Reinsertion &amp; validation</strong> — improved text goes back into the original document structure; the file is re-opened and validated before download.</li>
-      <li><strong>5. Download &amp; report</strong> — a refined document plus a processing report. The original is never altered and stays downloadable.</li>
-      <li><strong>6. Automatic deletion</strong> — the uploaded file and all temporary data are deleted 48 hours after upload.</li>
+    <ul class="steps">
+      <li><span class="step-icon">${icon("upload")}</span><div><strong>1. Upload</strong> — DOCX, ODT, PDF, RTF, or TXT, validated by type and content (not just the file extension).</div></li>
+      <li><span class="step-icon">${icon("search")}</span><div><strong>2. Structure analysis</strong> — chapters, sections, tables, figures, equations, citations, and references are identified; protected content is marked and never rewritten.</div></li>
+      <li><span class="step-icon">${icon("refresh")}</span><div><strong>3. Section-by-section refinement</strong> — eligible paragraphs are refined in context-aware batches, with terminology kept consistent across chapters.</div></li>
+      <li><span class="step-icon">${icon("checkCircle")}</span><div><strong>4. Reinsertion &amp; validation</strong> — improved text goes back into the original document structure; the file is re-opened and validated before download.</div></li>
+      <li><span class="step-icon">${icon("download")}</span><div><strong>5. Download &amp; report</strong> — a refined document plus a processing report. The original is never altered and stays downloadable.</div></li>
+      <li><span class="step-icon">${icon("clock")}</span><div><strong>6. Automatic deletion</strong> — the uploaded file and all temporary data are deleted 48 hours after upload.</div></li>
     </ul>
-    <h2 style="margin-top:32px">What is protected — always</h2>
+    <h2 style="margin-top:32px"><span class="h-icon">${icon("shield")} What is protected — always</span></h2>
     <p class="muted">Research findings, numerical results, statistical values, hypotheses, quotations, citations, bibliographic entries, equations, variable names, tables, captions, footnotes, headers, footers, and research instruments are never rewritten.</p>
-    <h2 style="margin-top:32px">Known limitations — stated, not hidden</h2>
+    <h2 style="margin-top:32px"><span class="h-icon">${icon("alert")} Known limitations — stated, not hidden</span></h2>
     <ul class="clean">
       <li><strong>PDF:</strong> only the text layer is refined; the refined output is a plain-text file and the original PDF's layout is not rebuilt. The original PDF stays downloadable.</li>
       <li><strong>Scanned PDFs:</strong> a PDF with no text layer cannot be processed — full OCR cannot run inside a Cloudflare Worker. You will get a clear message, never empty output.</li>
@@ -379,14 +449,14 @@ function renderResearch() {
   function renderFailed() {
     const msg = (job && job.error) || "Processing failed.";
     const retry = job && job.status === "needs-provider"
-      ? `<p style="margin-top:12px"><button class="btn" id="d-retry">Retry now</button> <span class="small muted">Use this after a provider has been configured.</span></p>` : "";
+      ? `<p style="margin-top:12px"><button class="btn" id="d-retry">${icon("refresh")}<span class="btn-text">Retry now</span></button> <span class="small muted">Use this after a provider has been configured.</span></p>` : "";
     $("#d-progress").innerHTML = `<div class="card"><h3>${esc(job ? job.originalFilename : "Document")}</h3>
       <p>${esc(msg)}</p>${retry}</div>`;
     const btn = $("#d-retry");
     if (btn) btn.addEventListener("click", async () => {
-      btn.disabled = true; btn.textContent = "Retrying…";
+      btn.disabled = true; setBtnLabel(btn, "Retrying…");
       const res = await fetch(`/api/documents/${job.id}/retry`, { method: "POST" });
-      if (!res.ok) { btn.disabled = false; btn.textContent = "Retry now"; return; }
+      if (!res.ok) { btn.disabled = false; setBtnLabel(btn, "Retry now"); return; }
       const data = await res.json();
       job = data.job; renderProgress();
       pollTimer = setInterval(pollStatus, 2000);
@@ -414,9 +484,9 @@ function renderResearch() {
         <tr><td>Paragraphs skipped (empty)</td><td colspan="2">${s.paragraphsSkipped}</td></tr>
       </table>
       <div class="actions">
-        <button class="btn btn-accent" id="d-download">Download refined document</button>
-        <button class="btn" id="d-download-orig">Download original</button>
-        <button class="btn" id="d-again">Refine another document</button>
+        <button class="btn btn-accent" id="d-download">${icon("download")}<span class="btn-text">Download refined document</span></button>
+        <button class="btn" id="d-download-orig">${icon("download")}<span class="btn-text">Download original</span></button>
+        <button class="btn" id="d-again">${icon("refresh")}<span class="btn-text">Refine another document</span></button>
       </div>
       ${chapterRows ? `<h3 style="margin-top:20px">Structure found</h3><table><tr><th>Section</th><th>Type</th></tr>${chapterRows}</table>` : ""}
       ${protectedRows ? `<h3 style="margin-top:20px">Protected content (left untouched)</h3><table><tr><th>What</th><th>Count</th></tr>${protectedRows}</table>` : ""}
@@ -450,7 +520,7 @@ function renderResearch() {
 function renderAcademic() {
   view.innerHTML = `
   <section class="workspace">
-    <h1>Academic Assistant</h1>
+    <h1 class="page-title">${icon("book")} Academic Assistant</h1>
     <p class="muted">Refine each part of a research project — abstracts to recommendations — in the conventions of your discipline. Unsupported factual claims are flagged for verification; sources are never invented.</p>
     ${providerBanner()}
     <div class="toolbar">
@@ -460,25 +530,25 @@ function renderAcademic() {
     <div class="panels">
       <div class="panel"><div class="panel-head"><span>Your section draft</span><span class="muted" id="a-counts">0 words</span></div>
         <div class="panel-body"><textarea id="a-input" rows="12" placeholder="Paste your abstract, introduction, methodology…"></textarea></div></div>
-      <div class="panel"><div class="panel-head"><span>Refined</span><button class="btn btn-sm btn-ghost" id="a-copy" disabled>Copy</button></div>
+      <div class="panel"><div class="panel-head"><span>Refined</span><button class="btn btn-sm btn-ghost" id="a-copy" disabled>${icon("copy")}<span class="btn-text">Copy</span></button></div>
         <div class="panel-body"><div class="readonly placeholder" id="a-output">Your refined section will appear here.</div></div></div>
     </div>
-    <div class="actions"><button class="btn btn-accent" id="a-refine">Refine section</button><button class="btn" id="a-clear">Clear</button></div>
+    <div class="actions"><button class="btn btn-accent" id="a-refine">${icon("zap")}<span class="btn-text">Refine section</span></button><button class="btn" id="a-clear">${icon("trash")}<span class="btn-text">Clear</span></button></div>
     <div id="a-status"></div>
     <div id="a-claims"></div>
     <div class="grid grid-3" style="margin-top:24px">
-      <div class="card"><h3>Terminology, in context</h3><p>Use the Writing Constructor to test alternative academic expressions for a sentence before committing to them.</p></div>
-      <div class="card"><h3>Transitions</h3><p>Prefer precise connectors — <em>however, therefore, consequently, in contrast</em> — over filler such as “it is important to note that”.</p></div>
-      <div class="card"><h3>Claims need sources</h3><p>A sentence like “studies show…” with no citation is flagged below. Add the source yourself; Proseforge will not invent one.</p></div>
+      <div class="card feature"><div class="icon-tile">${icon("book")}</div><h3>Terminology, in context</h3><p>Use the Writing Constructor to test alternative academic expressions for a sentence before committing to them.</p></div>
+      <div class="card feature"><div class="icon-tile">${icon("arrowRight")}</div><h3>Transitions</h3><p>Prefer precise connectors — <em>however, therefore, consequently, in contrast</em> — over filler such as “it is important to note that”.</p></div>
+      <div class="card feature"><div class="icon-tile">${icon("alert")}</div><h3>Claims need sources</h3><p>A sentence like “studies show…” with no citation is flagged below. Add the source yourself; Proseforge will not invent one.</p></div>
     </div>
   </section>`;
   const input = $("#a-input"), output = $("#a-output");
   input.addEventListener("input", () => { $("#a-counts").textContent = `${counts(input.value).words.toLocaleString()} words`; });
   $("#a-refine").addEventListener("click", async () => {
     if (!input.value.trim()) { $("#a-status").innerHTML = statusHtml("warn", "Paste your section draft first."); return; }
-    const btn = $("#a-refine"); btn.disabled = true; btn.textContent = "Refining…";
+    const btn = $("#a-refine"); btn.disabled = true; setBtnLabel(btn, "Refining…");
     const r = await api("/api/academic", { text: input.value, section: $("#a-section").value, discipline: $("#a-discipline").value });
-    btn.disabled = false; btn.textContent = "Refine section";
+    btn.disabled = false; setBtnLabel(btn, "Refine section");
     if (r.ok) {
       output.classList.remove("placeholder"); output.textContent = r.data.refined;
       $("#a-copy").disabled = false;
@@ -495,7 +565,7 @@ function renderAcademic() {
 function renderConstructor() {
   view.innerHTML = `
   <section class="workspace">
-    <h1>Writing Constructor</h1>
+    <h1 class="page-title">${icon("layers")} Writing Constructor</h1>
     <p class="muted">Enter an ordinary sentence, a basic explanation, or a collection of ideas. Proseforge builds three alternative constructions — same meaning, different structure — so you can compare and choose.</p>
     ${providerBanner()}
     <div class="toolbar">
@@ -504,7 +574,7 @@ function renderConstructor() {
     <div class="card">
       <label for="c-input" style="font-weight:650;font-size:.9rem">Your sentence, explanation, or ideas</label>
       <textarea id="c-input" rows="5" placeholder="e.g. The government should do more about unemployment because many young people do not have jobs."></textarea>
-      <div class="actions"><button class="btn btn-accent" id="c-build">Build alternatives</button><button class="btn" id="c-clear">Clear</button></div>
+      <div class="actions"><button class="btn btn-accent" id="c-build">${icon("layers")}<span class="btn-text">Build alternatives</span></button><button class="btn" id="c-clear">${icon("trash")}<span class="btn-text">Clear</span></button></div>
       <div id="c-status"></div>
     </div>
     <div id="c-results" style="margin-top:16px"></div>
@@ -512,47 +582,47 @@ function renderConstructor() {
   $("#c-build").addEventListener("click", async () => {
     const input = $("#c-input").value;
     if (!input.trim()) { $("#c-status").innerHTML = statusHtml("warn", "Enter a sentence or some ideas first."); return; }
-    const btn = $("#c-build"); btn.disabled = true; btn.textContent = "Building…";
+    const btn = $("#c-build"); btn.disabled = true; setBtnLabel(btn, "Building…");
     const r = await api("/api/construct", { text: input, discipline: $("#c-discipline").value });
-    btn.disabled = false; btn.textContent = "Build alternatives";
+    btn.disabled = false; setBtnLabel(btn, "Build alternatives");
     if (!r.ok) { $("#c-status").innerHTML = statusHtml("error", errorMessage(r)); return; }
     $("#c-status").innerHTML = "";
     $("#c-results").innerHTML = `
       <div class="card" style="margin-bottom:12px"><h3>Original</h3><p>${esc(r.data.original)}</p></div>
       ${r.data.alternatives.map((alt, i) => `
         <div class="alt-item"><div class="alt-text"><strong>Alternative ${i + 1}.</strong> ${esc(alt)}</div>
-        <button class="btn btn-sm" data-copy="${esc(alt)}">Copy this version</button></div>`).join("")}`;
+        <button class="btn btn-sm" data-copy="${esc(alt)}">${icon("copy")}<span class="btn-text">Copy this version</span></button></div>`).join("")}`;
     $$("#c-results [data-copy]").forEach((b) => b.addEventListener("click", async () => {
       await navigator.clipboard.writeText(b.dataset.copy);
-      b.textContent = "Copied"; setTimeout(() => { b.textContent = "Copy this version"; }, 1500);
+      setBtnLabel(b, "Copied"); setTimeout(() => { setBtnLabel(b, "Copy this version"); }, 1500);
     }));
   });
   $("#c-clear").addEventListener("click", () => { $("#c-input").value = ""; $("#c-results").innerHTML = ""; $("#c-status").innerHTML = ""; });
 }
 
 /* ---------------- Writing Analysis ---------------- */
-function metricCard(label, value, hint) {
-  return `<div class="metric"><div class="value">${esc(String(value))}</div><div class="label">${esc(label)}</div><div class="hint">${esc(hint)}</div></div>`;
+function metricCard(label, value, hint, ic) {
+  return `<div class="metric"><div class="m-head"><div class="value">${esc(String(value))}</div>${ic ? `<span class="m-icon">${icon(ic)}</span>` : ""}</div><div class="label">${esc(label)}</div><div class="hint">${esc(hint)}</div></div>`;
 }
 function analysisHtml(a, title) {
   return `<h3 style="margin-top:20px">${esc(title)}</h3><div class="metrics">
-    ${metricCard("Words", a.words, "Total words")}
-    ${metricCard("Sentences", a.sentences, `Avg ${a.avgSentenceLength} words/sentence`)}
-    ${metricCard("Reading ease", a.fleschReadingEase, "Flesch — higher is easier")}
-    ${metricCard("Grade level", a.fleschKincaidGrade, "Flesch–Kincaid, US grade")}
-    ${metricCard("Vocabulary diversity", a.lexicalDiversity, "Unique words ÷ total words")}
-    ${metricCard("Sentence variation", a.sentenceLengthVariation, "Std. dev. of sentence length")}
-    ${metricCard("Long sentences", `${Math.round(a.longSentenceShare * 100)}%`, "Share over 30 words")}
-    ${metricCard("Reading time", `${a.readingTimeMinutes} min`, "At ~200 wpm")}
-    ${metricCard("Filler words", a.fillerCount, "very, really, just, actually…")}
-    ${metricCard("Tone", a.tone.label, `${a.tone.contractions} contractions · ${a.tone.formalWords} formal markers`)}
+    ${metricCard("Words", a.words, "Total words", "fileText")}
+    ${metricCard("Sentences", a.sentences, `Avg ${a.avgSentenceLength} words/sentence`, "layers")}
+    ${metricCard("Reading ease", a.fleschReadingEase, "Flesch — higher is easier", "eye")}
+    ${metricCard("Grade level", a.fleschKincaidGrade, "Flesch–Kincaid, US grade", "book")}
+    ${metricCard("Vocabulary diversity", a.lexicalDiversity, "Unique words ÷ total words", "zap")}
+    ${metricCard("Sentence variation", a.sentenceLengthVariation, "Std. dev. of sentence length", "refresh")}
+    ${metricCard("Long sentences", `${Math.round(a.longSentenceShare * 100)}%`, "Share over 30 words", "alert")}
+    ${metricCard("Reading time", `${a.readingTimeMinutes} min`, "At ~200 wpm", "clock")}
+    ${metricCard("Filler words", a.fillerCount, "very, really, just, actually…", "trash")}
+    ${metricCard("Tone", a.tone.label, `${a.tone.contractions} contractions · ${a.tone.formalWords} formal markers`, "info")}
   </div>
   ${a.repeatedWords.length ? `<p class="small" style="margin-top:12px"><strong>Most repeated words:</strong> ${a.repeatedWords.map((r) => `${esc(r.word)} (×${r.count})`).join(", ")}</p>` : `<p class="small muted" style="margin-top:12px">No word is repeated 3+ times — good variety.</p>`}`;
 }
 function renderAnalysis() {
   view.innerHTML = `
   <section class="workspace">
-    <h1>Writing Analysis</h1>
+    <h1 class="page-title">${icon("chart")} Writing Analysis</h1>
     <p class="muted">Transparent editorial indicators for your writing — before and after refinement. These are computed directly from the text; they are <strong>not scientifically validated scores</strong>.</p>
     <div class="panels">
       <div class="panel"><div class="panel-head"><span>Original text</span></div>
@@ -560,7 +630,7 @@ function renderAnalysis() {
       <div class="panel"><div class="panel-head"><span>Refined text (optional)</span></div>
         <div class="panel-body"><textarea id="an-refined" rows="10" placeholder="Paste the refined version to compare…">${esc(state.lastRefined)}</textarea></div></div>
     </div>
-    <div class="actions"><button class="btn btn-accent" id="an-run">Analyse</button></div>
+    <div class="actions"><button class="btn btn-accent" id="an-run">${icon("chart")}<span class="btn-text">Analyse</span></button></div>
     <div id="an-status"></div>
     <div id="an-results"></div>
   </section>`;
@@ -578,7 +648,7 @@ function renderAnalysis() {
 function renderAbout() {
   view.innerHTML = `
   <section class="workspace narrow">
-    <h1>About Proseforge</h1>
+    <h1 class="page-title">${icon("info")} About Proseforge</h1>
     <p>Proseforge is an AI-powered writing and research refinement platform. It turns robotic, repetitive, unnatural, and poorly constructed AI-assisted writing into natural, sophisticated, contextually appropriate, and genuinely readable prose — from a single paragraph to an entire academic dissertation.</p>
     <p>It is not a paraphrasing tool and not a synonym swapper. The engine reads the whole passage before improving it: sentence construction and rhythm, vocabulary and discipline-specific terminology, paragraph development, transitions, and argument flow — while preserving the author's meaning, facts, and voice.</p>
     <h2>What it will not do</h2>
@@ -597,7 +667,7 @@ function renderAbout() {
 function renderPrivacy() {
   view.innerHTML = `
   <section class="workspace narrow">
-    <h1>Privacy</h1>
+    <h1 class="page-title">${icon("shield")} Privacy</h1>
     <p class="muted">Last updated: 19 November 2026. This policy describes what the code actually does.</p>
     <h2>No account, no tracking profile</h2>
     <p>Proseforge has no login, no mandatory email address, no user profiles, and no permanent identifiers. There is nothing to sign up for.</p>

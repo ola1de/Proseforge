@@ -8,6 +8,23 @@ No login. No account. Text is processed in memory and never stored; uploaded doc
 
 > **What Proseforge will not do:** invent facts, statistics, quotations, or references; change research results, numbers, citations, or equations; or claim to make text undetectable by AI detectors. Detector-evasion is not a feature.
 
+## Screenshots
+
+![Proseforge homepage — hero, before/after example, and try-it-now workspace](docs/screenshots/home.png)
+*Homepage — hero, before/after example, and the try-it-now workspace.*
+
+![Humanise Text workspace](docs/screenshots/humanise.png)
+*Humanise Text workspace — modes, intensities, disciplines, side-by-side panels.*
+
+![Research Document workspace](docs/screenshots/research.png)
+*Research Document workspace — drag-and-drop upload, the six-step pipeline, protected content.*
+
+![Writing Analysis with before/after metrics](docs/screenshots/analysis.png)
+*Writing Analysis — readability, vocabulary diversity, and tone, before and after.*
+
+![Academic Assistant workspace](docs/screenshots/academic.png)
+*Academic Assistant — refine each section of a research project in your discipline's conventions.*
+
 ## Features (Milestone 1 — shipped)
 
 - **Humanise Text** — 10 refinement modes (Natural & Fluent, Academic, Advanced Academic, Professional, Conversational, Technical, Concise, Expanded, Formal, Custom Voice) × 3 intensities, across 16 academic disciplines, with side-by-side comparison, word/character counts, copy/download/clear, and undo/redo.

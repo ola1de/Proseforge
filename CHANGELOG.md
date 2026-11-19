@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.3.0 — 2026-11-19 (Milestone 3 — presentation & UI polish)
+
+- Hand-written inline SVG icon set (feather-style line icons, no emoji, no external CDN, no icon font): navigation, feature cards, workspace actions (copy, download, clear, undo/redo, upload, retry), status states, and analysis metrics.
+- Richer homepage hero: trust chips (No login, Deleted after 48 hours, Powered by Cloudflare Workers AI) and a before/after product visual built from the real sample text — filler phrases highlighted, the "after" version hand-written and clearly labelled as an illustrative example, never presented as live AI output.
+- Feature cards with icon tiles, hover lift, and links into each workspace; academic tip cards with icons; research pipeline as an icon step list; dropzone upload icon; page-title icons on every workspace.
+- Header navigation compacted (icons + shorter labels) so all eight routes fit at desktop width; icon-only links on tablet widths; mobile collapse unchanged.
+- Screenshots: `docs/screenshots/` (homepage, Humanise, Research, Analysis, Academic) embedded in a new README "Screenshots" section.
+- All existing element ids, classes, routes, form fields, and JS behaviour hooks preserved; 78 Vitest tests passing; TypeScript clean.
+
 ## 0.2.0 — 2026-11-19 (Milestone 2)
 
 - Research document engine: DOCX structural preservation (edits only `w:t` text of eligible body paragraphs in place; styles, numbering, headers/footers, footnotes, tables incl. merged cells, images, charts, hyperlinks, TOC fields, page/section breaks untouched), ODT (same in-place approach on `content.xml`), RTF (bold/italic paragraph structure), TXT, and text-layer PDF extraction.
