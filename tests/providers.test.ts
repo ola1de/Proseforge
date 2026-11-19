@@ -28,4 +28,18 @@ describe("provider resolution", () => {
     const p = new WorkersAIProvider(env);
     await expect(p.complete({ system: "s", user: "u", maxTokens: 10, timeoutMs: 5000 })).rejects.toMatchObject({ code: "PROVIDER_NOT_CONFIGURED" });
   });
+  it("Workers AI call passes temperature 0.3 (steadier, more faithful output)", async () => {
+    let captured: unknown;
+    const env = {
+      AI: {
+        run: async (_model: string, opts: unknown) => {
+          captured = opts;
+          return { response: "ok" };
+        },
+      },
+    } as unknown as Env;
+    const p = new WorkersAIProvider(env);
+    await expect(p.complete({ system: "s", user: "u", maxTokens: 10, timeoutMs: 5000 })).resolves.toBe("ok");
+    expect(captured).toMatchObject({ temperature: 0.3, max_tokens: 10 });
+  });
 });
