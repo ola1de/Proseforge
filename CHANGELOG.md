@@ -1,5 +1,24 @@
 # Changelog
 
+## 0.5.0 — 2026-11-19 (Milestone 5 — write like a human, for real)
+
+- Rewrote the prompt system around a minimal-change rule: if a sentence already sounds natural and clear, it is returned unchanged. The new HUMAN WRITING RULES block is appended to every system prompt (refine, academic sections, constructor): preserve the author's voice, rhythm, and sentence lengths (including short ones); prefer the plainest accurate word and never replace a simple word with a fancier one (say, not convey); keep contractions and the author's level of formality; never lengthen a sentence that is already clear; never add imagery, examples, or filler the author did not write.
+- Banned AI-tell phrases are now named explicitly in the prompt: moreover, furthermore, additionally, in conclusion, "in today's fast-paced world", "it is important to note", delve, tapestry, landscape, crucial, paramount, "at my fingertips", "a testament to", "plays a crucial role", "shed light on", and more.
+- Mode and intensity wording rewritten to match: "natural" is now a minimal-edit mode; academic modes ask for precise, plain academic English (sophisticated in argument, not in fancy words); "balanced" now means "fix what is actually weak and leave the rest alone". All mode ids, labels, descriptions, and disciplines unchanged.
+- Workers AI calls now set temperature 0.3 explicitly (matching the OpenAI-compatible adapter) so output sticks closer to the author's text. Model, maxTokens, timeout, and error handling unchanged.
+- 6 new tests (prompt rules present in every mode/intensity/section, mode metadata unchanged, temperature passed to the model); 89 Vitest tests passing; TypeScript clean.
+- Honest limit: these are prompt-level guardrails on a small 8B model — they should sharply reduce fancy-word upgrades, clichés, and meaning drift, but they cannot guarantee the model never slips. Live quality must be judged on real output after deploy; if drift persists, the next lever is a larger/different model, not more prompt text.
+
+## 0.4.0 — 2026-11-19 (Milestone 4 — fast & responsive)
+
+- Parallel refinement: text chunks (`/api/refine`, `/api/academic`) and document batches now run concurrently (up to 4 AI calls in flight) instead of one after another, with output order preserved. The terminology note is computed once from the whole text up front and shared by every chunk/batch; the per-paragraph fallback for a batch whose paragraph count mismatches is unchanged.
+- Live document progress: a job's status now moves 35→95% batch by batch ("Refining batch X of Y…", "Refining chunk X of Y…" for PDF text) instead of sitting frozen at 35% for the whole refine phase. One status write per completed batch/chunk.
+- Refine controls: Cancel button on the Home, Humanise, and Academic refine actions, a live elapsed-time line while a refine is in flight ("Refining… 12s — long texts can take up to a minute"), and a 3-minute client timeout that surfaces a friendly error instead of hanging forever.
+- Research upload: real upload percentage via XMLHttpRequest progress events, so a large file on a slow connection shows its progress instead of a frozen "Uploading…".
+- Stall recovery: if a document job makes no progress for 3 minutes, polling stops and the UI says so ("This job seems stuck — it hasn't made progress in 3 minutes.") with a Retry button. The server retry endpoint now also accepts jobs stuck in uploaded/analysing/refining (previously only failed/needs-provider). A retried job re-runs the same document; if the old background task is somehow still alive, the last complete write wins.
+- Research progress card now shows elapsed time alongside the stage and percentage.
+- 5 new tests (parallel batches/chunks with order + progress, parallel `/api/refine`, a 40-paragraph document job completing through the real waitUntil path, retry of a stuck refining job); 89 Vitest tests passing; TypeScript clean.
+
 ## 0.3.0 — 2026-11-19 (Milestone 3 — presentation & UI polish)
 
 - Hand-written inline SVG icon set (feather-style line icons, no emoji, no external CDN, no icon font): navigation, feature cards, workspace actions (copy, download, clear, undo/redo, upload, retry), status states, and analysis metrics.
