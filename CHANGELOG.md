@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.6.0 — 2026-11-19 (Milestone 6 — AI Checker)
+
+- New AI Checker workspace (`#/checker`, nav item "Checker"): paste any text and see whether it reads as AI-generated or human. Built entirely from local, deterministic statistical signals — no external detector API, no key, no model call, no stored text.
+- Six transparent signals with fixed, documented weights: AI-tell phrase density (35%), sentence rhythm / burstiness (25%), vocabulary diversity (15%), repetition (15%), sentence shape (5%), filler-transition density (5%). Every result shows the 0–100 score with its band and the per-signal breakdown that produced it, plus the exact phrases found and the flagged sentences.
+- Bands: 0–30 "Reads human", 31–60 "Mixed signals", 61–100 "Reads AI-generated". Below 100 words the verdict is withheld ("Too short to judge reliably") while the score and signals are still shown.
+- The banned-phrase list is now a shared export (`src/ai-phrases.ts`) used by both the prompt system and the checker, so the two can never drift apart. The prompt sentence it renders is byte-identical to Milestone 5.
+- "Check this text" buttons in the Humanise workspace (refined text) and the Writing Analysis workspace (original or refined), plus a home-page FAQ entry on checker accuracy.
+- Honest limit: no detector is perfectly accurate, and this one is an indicator, not proof — short texts, edited text, and non-native English can all mislead it. It is best used to judge whether a refinement still reads as AI. Acceptance fixtures pinned in tests: the robotic homepage sample scores 61+ and the plain human paragraph from Milestone 5 scores 0–30.
+- 12 new tests (signal units, both acceptance fixtures, too-short case, API coverage); 101 Vitest tests passing; TypeScript clean.
+
 ## 0.5.0 — 2026-11-19 (Milestone 5 — write like a human, for real)
 
 - Rewrote the prompt system around a minimal-change rule: if a sentence already sounds natural and clear, it is returned unchanged. The new HUMAN WRITING RULES block is appended to every system prompt (refine, academic sections, constructor): preserve the author's voice, rhythm, and sentence lengths (including short ones); prefer the plainest accurate word and never replace a simple word with a fancier one (say, not convey); keep contractions and the author's level of formality; never lengthen a sentence that is already clear; never add imagery, examples, or filler the author did not write.
