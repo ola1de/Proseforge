@@ -121,5 +121,6 @@ describe("DOCX refinement round-trip", () => {
 
 async function refineViaFake(texts: string[]): Promise<string[]> {
   // Route through the same batch helper the pipeline uses.
-  return refineParagraphTexts(fakeRefineProvider, buildSystemPrompt({ modeId: "academic", intensity: "balanced" }), texts, 5000);
+  const r = await refineParagraphTexts(fakeRefineProvider, buildSystemPrompt({ modeId: "academic", intensity: "balanced" }), texts, 5000);
+  return r.texts;
 }
