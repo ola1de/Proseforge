@@ -1,0 +1,28 @@
+{
+  "name": "proseforge",
+  "version": "0.1.0",
+  "description": "Proseforge — AI-powered human writing and research refinement platform. Write like a human. Read like a pro.",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "build": "tsc --noEmit && node scripts/build-check.mjs",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20261118.1",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4",
+    "wrangler": "^4.165.0"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "fast-xml-parser": "^5.12.1",
+    "jszip": "^3.10.2"
+  }
+}
