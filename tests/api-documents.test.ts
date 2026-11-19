@@ -8,6 +8,7 @@
 import { describe, it, expect } from "vitest";
 import worker from "../src/index";
 import type { Env } from "../src/types";
+import { memoryStore, newJobId } from "../src/store";
 import { buildSampleDocx, buildScannedPdf } from "./fixtures/sample-docx";
 
 const fakeAIEnv = {
@@ -112,6 +113,30 @@ describe("documents API", () => {
     expect(retry.status).toBe(202);
     const retryData = await retry.json() as { job: { status: string } };
     expect(retryData.job.status).toBe("done");
+  });
+
+  it("retries a stuck refining job (background task died without failing it)", async () => {
+    // Fabricate the exact state the live site showed: a job frozen in
+    // "refining" at 35% because its background task died. Retry must
+    // accept it and the re-run must complete.
+    const bytes = await buildSampleDocx();
+    const id = newJobId();
+    await memoryStore.create({
+      id, format: "docx", originalFilename: "thesis.docx",
+      mime: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      sizeBytes: bytes.length, status: "refining",
+      stage: "Refining batch 1 of 4…", progress: 35,
+      uploadedAt: new Date().toISOString(), r2Key: `original/${id}`,
+    }, bytes);
+    const retry = await worker.fetch(new Request(`https://proseforge.test/api/documents/${id}/retry`, { method: "POST", headers: { "CF-Connecting-IP": "10.1.0.9" } }), fakeAIEnv);
+    expect(retry.status).toBe(202);
+    const retryData = await retry.json() as { job: { status: string } };
+    // Inline processing in tests: the retried job finishes.
+    expect(retryData.job.status).toBe("done");
+
+    // …while a finished job still cannot be retried.
+    const doneRetry = await worker.fetch(new Request(`https://proseforge.test/api/documents/${id}/retry`, { method: "POST", headers: { "CF-Connecting-IP": "10.1.0.9" } }), fakeAIEnv);
+    expect(doneRetry.status).toBe(400);
   });
 
   it("fails honestly on a scanned PDF through the API", async () => {
