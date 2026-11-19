@@ -5,7 +5,7 @@
 // deleted by the scheduled cleanup 48 hours after upload.
 import { analyseText, flagUnsupportedClaims } from "./analysis";
 import { checkText, MIN_WORDS_FOR_VERDICT } from "./checker";
-import { splitIntoChunks, terminologyNote, countWords } from "./chunking";
+import { adaptiveMaxTokens, splitIntoChunks, terminologyNote, countWords } from "./chunking";
 import { ACADEMIC_SECTIONS, buildAcademicPrompt, buildConstructPrompt, buildSystemPrompt } from "./prompts";
 import { DISCIPLINES, MODES, INTENSITIES, findIntensity, findMode } from "./modes";
 import { PROVIDER_NOT_CONFIGURED_SETUP, getModel, resolveProvider, resolveProviderKind, type AIProvider } from "./providers";
@@ -34,8 +34,8 @@ function maxTextChars(env: Env): number {
   return Number.isFinite(n) && n > 0 ? n : 100000;
 }
 function timeoutMs(env: Env): number {
-  const n = Number(env.AI_TIMEOUT_MS ?? "60000");
-  return Number.isFinite(n) && n > 0 ? n : 60000;
+  const n = Number(env.AI_TIMEOUT_MS ?? "90000");
+  return Number.isFinite(n) && n > 0 ? n : 90000;
 }
 function rateLimit(env: Env): number {
   const n = Number(env.RATE_LIMIT_PER_MINUTE ?? "30");
@@ -105,21 +105,33 @@ function providerErrorResponse(e: unknown): Response {
   return err("AI_PROVIDER_ERROR", "The AI provider could not complete this request. Please try again later.", 502);
 }
 
-async function refineWithChunks(provider: AIProvider, env: Env, text: string, system: string): Promise<string> {
+async function refineWithChunks(provider: AIProvider, env: Env, text: string, system: string): Promise<{ refined: string; failedChunks: number[] }> {
   const chunks = splitIntoChunks(text);
-  if (chunks.length === 0) return "";
+  if (chunks.length === 0) return { refined: "", failedChunks: [] };
   // The terminology note is computed once from the whole text up front
   // and shared by every chunk — there is no running "seen" state, so
   // chunks can run CONCURRENTLY (up to 4 in flight) instead of one after
   // another. Results are joined in chunk order, so the refined text
   // keeps the original order. Each chunk keeps its own overlap context.
+  //
+  // Partial failure is NOT a request failure: a chunk the provider
+  // cannot finish in time falls back to the ORIGINAL chunk text, and
+  // its index is reported in `failedChunks` so the caller can say so
+  // honestly instead of presenting unrefined text as refined.
   const note = terminologyNote(text);
   const contextPrefix = note ? `${note}\n\n` : "";
-  const refined = await mapWithConcurrency(chunks, 4, (chunk) => {
+  const failedChunks: number[] = [];
+  const refined = await mapWithConcurrency(chunks, 4, async (chunk) => {
     const user = `${contextPrefix}${chunk.overlap && chunk.index > 0 ? `Previous paragraph (for context only, do not repeat it): ${chunk.overlap}\n\n` : ""}Refine the following text:\n\n${chunk.text}`;
-    return provider.complete({ system, user, maxTokens: 4096, timeoutMs: timeoutMs(env) });
+    try {
+      return await provider.complete({ system, user, maxTokens: adaptiveMaxTokens(countWords(chunk.text)), timeoutMs: timeoutMs(env) });
+    } catch {
+      failedChunks.push(chunk.index);
+      return chunk.text; // original, unchanged
+    }
   });
-  return refined.join("\n\n");
+  failedChunks.sort((a, b) => a - b);
+  return { refined: refined.join("\n\n"), failedChunks };
 }
 
 export async function handleApi(req: Request, env: Env, url: URL, waitUntil?: (p: Promise<unknown>) => void): Promise<Response> {
@@ -195,8 +207,8 @@ export async function handleApi(req: Request, env: Env, url: URL, waitUntil?: (p
     if (!p.ok) return p.response;
     try {
       const system = buildSystemPrompt({ modeId: mode.id, intensity, customVoice, discipline });
-      const refined = await refineWithChunks(p.provider, env, v.text, system);
-      return json({ refined, mode: mode.id, intensity, discipline, words: countWords(v.text), chunks: splitIntoChunks(v.text).length }, 200, cors);
+      const { refined, failedChunks } = await refineWithChunks(p.provider, env, v.text, system);
+      return json({ refined, mode: mode.id, intensity, discipline, words: countWords(v.text), chunks: splitIntoChunks(v.text).length, ...(failedChunks.length ? { partial: true, failedChunks } : {}) }, 200, cors);
     } catch (e) { return providerErrorResponse(e); }
   }
 
@@ -209,9 +221,9 @@ export async function handleApi(req: Request, env: Env, url: URL, waitUntil?: (p
     const p = requireProvider(env);
     if (!p.ok) return p.response;
     try {
-      const refined = await refineWithChunks(p.provider, env, v.text, buildAcademicPrompt(section, discipline));
+      const { refined, failedChunks } = await refineWithChunks(p.provider, env, v.text, buildAcademicPrompt(section, discipline));
       const unsupportedClaims = flagUnsupportedClaims(v.text);
-      return json({ refined, section, discipline, unsupportedClaims, claimNote: unsupportedClaims.length ? "These sentences make factual claims without a citation in the text. Verify them and add a source yourself — Proseforge never invents citations." : "No unsupported factual claims were flagged in this text." }, 200, cors);
+      return json({ refined, section, discipline, unsupportedClaims, claimNote: unsupportedClaims.length ? "These sentences make factual claims without a citation in the text. Verify them and add a source yourself — Proseforge never invents citations." : "No unsupported factual claims were flagged in this text.", ...(failedChunks.length ? { partial: true, failedChunks } : {}) }, 200, cors);
     } catch (e) { return providerErrorResponse(e); }
   }
 
