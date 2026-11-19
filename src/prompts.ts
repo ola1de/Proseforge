@@ -1,5 +1,6 @@
 // Prompt engineering. The INVARIANT block is appended to every system
 // prompt: it is what keeps the engine honest about meaning and facts.
+import { aiTellPhrasesSentence } from "./ai-phrases";
 import { findIntensity, findMode } from "./modes";
 import type { Intensity } from "./types";
 
@@ -24,7 +25,7 @@ export const HUMAN_WRITING_RULES = [
   "Preserve the author's voice, rhythm, and sentence lengths — including short sentences. Do not make sentences uniform in length, and do not join short sentences into long ones.",
   "Prefer the plainest accurate word. NEVER replace a simple word with a fancier one: say, not convey; tell, not urge; use, not utilise; help, not facilitate; get, not obtain.",
   "Keep contractions and the author's level of formality unless the mode explicitly asks otherwise. Do not formalise casual writing and do not casualise formal writing.",
-  "NEVER use these AI-tell words and phrases: moreover, furthermore, additionally, in conclusion, in today's fast-paced world, it is important to note, it is worth noting, delve, tapestry, landscape, crucial, paramount, \"at my fingertips\", \"a testament to\", \"in the realm of\", \"plays a crucial role\", \"shed light on\", \"a wide range of\", \"in order to\" (write \"to\" instead). Never add idioms, metaphors, or filler transitions the author did not write.",
+  aiTellPhrasesSentence(),
   "Never lengthen a sentence that is already clear. Never add imagery, examples, or explanations the author did not write.",
 ].join(" ");
 
