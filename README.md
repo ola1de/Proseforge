@@ -31,6 +31,7 @@ No login. No account. Text is processed in memory and never stored; uploaded doc
 - **Academic Assistant** — abstract, introduction, problem statement, objectives, questions, hypotheses, methodology, results, discussion, conclusion, recommendations; unsupported factual claims are flagged for verification, never given invented citations.
 - **Writing Constructor** — three alternative constructions of any sentence or idea, side by side.
 - **Writing Analysis** — readability, vocabulary diversity, repetition, sentence variation, tone, and more, computed locally and honestly labelled as editorial indicators, not scientifically validated scores, with before/after comparison.
+- **AI Checker** — paste any text and see whether it reads as AI-generated or human: a 0–100 score with its band ("Reads human" / "Mixed signals" / "Reads AI-generated") and the six local signals behind it — AI-tell phrases, sentence rhythm, vocabulary diversity, repetition, sentence shape, filler transitions. Honestly labelled as an indicator, not proof; best on passages of 100+ words. No external service, no stored text.
 - **Research Document** — whole dissertations and theses: DOCX and ODT with structural preservation, RTF, TXT, and text-layer PDF (see `docs/03-roadmap.md` for the honest limits on PDF layout and scanned PDFs).
 - **Privacy by design** — no accounts, no public document URLs, security headers/CSP, rate limiting, request-size limits, and a 48-hour server-side deletion mechanism (scheduled cleanup + storage lifecycle backstop).
 
@@ -44,7 +45,7 @@ An **optional** OpenAI-compatible adapter exists in `src/providers.ts` for opera
 
 ```bash
 npm install
-npm test          # 78 tests, must pass
+npm test          # 101 tests, must pass
 npm run build     # typecheck + asset check
 npx wrangler dev  # local dev at http://localhost:8787
 npx wrangler deploy
@@ -59,8 +60,9 @@ proseforge-platform/
   public/        # Frontend: index.html, styles.css, app.js (vanilla JS SPA, hash-routed)
   src/           # Worker: index.ts (API), modes.ts, prompts.ts, providers.ts,
                  #   analysis.ts, chunking.ts, security.ts, types.ts,
+                 #   ai-phrases.ts, checker.ts,
                  #   docx.ts, odt.ts, pdf.ts, rtf.ts, documents.ts, store.ts
-  tests/         # Vitest suite (78 tests, incl. real DOCX/ODT fixtures)
+  tests/         # Vitest suite (101 tests, incl. real DOCX/ODT fixtures)
   migrations/    # D1 schema for Milestone 2 job metadata (no document content, ever)
   scripts/       # build-check
   wrangler.jsonc # Workers config: ai binding, R2 + D1 + Queues (M2), hourly cleanup cron
@@ -76,6 +78,7 @@ proseforge-platform/
 | `/api/academic` | POST | `{ text, section, discipline? }` — 11 sections |
 | `/api/construct` | POST | `{ text, discipline? }` — 3 alternatives |
 | `/api/analyse` | POST | `{ text, refinedText? }` — local, no AI call |
+| `/api/check` | POST | `{ text }` — AI Checker, local multi-signal indicator, no AI call |
 | `/api/documents/upload` | POST | Multipart upload → 202 + job id; processing runs in the background |
 | `/api/documents/:id/status` | GET | Progress, stage, summary, fresh 15-minute download token when done |
 | `/api/documents/:id/report` | GET | Full processing report (chapters, counts, limitations, warnings) |
