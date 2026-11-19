@@ -109,6 +109,7 @@ details p{margin:.6rem 0 0;color:var(--muted)}
 .badge{display:inline-block;font-size:.78rem;font-weight:700;padding:3px 9px;border-radius:999px;background:var(--wash-2);color:var(--ink-soft);border:1px solid var(--line)}
 .badge.teal{background:var(--accent-wash);color:var(--accent-dark);border-color:#99f6e4}
 .badge.amber{background:var(--warn-wash);color:var(--warn-ink);border-color:#fde68a}
+.badge.red{background:var(--danger-wash);color:var(--danger);border-color:#fecaca}
 ul.clean{list-style:none;padding:0;margin:0}
 ul.clean li{padding:8px 0;border-bottom:1px solid var(--line)}
 ul.clean li:last-child{border-bottom:0}
