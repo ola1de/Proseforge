@@ -146,11 +146,22 @@ describe("document job pipeline", () => {
     const store = new InMemoryJobStore();
     const secret = "UNIQUESECRET-phrase-12345 that must never appear in errors";
     const job = await makeJob(store, "txt", "x.txt", new TextEncoder().encode(secret));
-    // Force a provider failure mid-processing.
+    // Force a provider failure mid-processing. Milestone 7: a failed
+    // batch no longer fails the job — the paragraph comes back unchanged
+    // and the job completes as "done" with the failure recorded. What
+    // must still hold: no document content anywhere in the error or
+    // the report warnings, and the paragraph must NOT be counted refined.
     const failing = { name: "mock" as const, complete: async () => { throw new Error("boom"); } };
     await processDocumentJob(store, failing, job, OPTS, 5000);
     const done = (await store.get(job.id))!;
-    expect(done.status).toBe("failed");
+    expect(done.status).toBe("done");
     expect(done.error ?? "").not.toContain("UNIQUESECRET");
+    const report = JSON.parse(done.reportJson!) as { warnings: string[]; paragraphsRefined: number; paragraphsSkipped: number };
+    expect(report.warnings.join(" ")).not.toContain("UNIQUESECRET");
+    expect(report.paragraphsRefined).toBe(0);
+    expect(report.paragraphsSkipped).toBe(1);
+    expect(report.warnings.join(" ")).toContain("could not be refined in time");
+    const out = new TextDecoder().decode((await store.getBytes(done.refinedR2Key!))!);
+    expect(out).toBe(secret); // original text, returned unchanged
   });
 });
