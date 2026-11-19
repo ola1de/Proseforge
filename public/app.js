@@ -68,15 +68,72 @@ function setBtnLabel(btn, text) {
   if (span) span.textContent = text; else btn.textContent = text;
 }
 
-async function api(path, body) {
-  const res = await fetch(path, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body || {}),
-  });
-  let data = null;
-  try { data = await res.json(); } catch { data = null; }
-  return { ok: res.ok, status: res.status, data };
+/* POST a JSON API request with a timeout so a hung request surfaces a
+   friendly error instead of hanging forever. Pass { signal } to make the
+   request cancellable (e.g. a Cancel button); pass { timeoutMs } to
+   override the 180-second default. Returns { ok, status, data } as
+   before, plus cancelled: true when the caller's signal aborted it. */
+async function api(path, body, options) {
+  const timeoutMs = (options && options.timeoutMs) || 180000;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  let externalAbort = null;
+  if (options && options.signal) {
+    if (options.signal.aborted) controller.abort();
+    else { externalAbort = () => controller.abort(); options.signal.addEventListener("abort", externalAbort, { once: true }); }
+  }
+  try {
+    const res = await fetch(path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body || {}),
+      signal: controller.signal,
+    });
+    let data = null;
+    try { data = await res.json(); } catch { data = null; }
+    return { ok: res.ok, status: res.status, data };
+  } catch (e) {
+    if (e && e.name === "AbortError") {
+      if (options && options.signal && options.signal.aborted) return { ok: false, status: 0, cancelled: true, data: null };
+      return { ok: false, status: 0, data: { message: "The request took too long (over 3 minutes). Please try again with shorter text, or split a long document into smaller parts." } };
+    }
+    return { ok: false, status: 0, data: null };
+  } finally {
+    clearTimeout(timer);
+    if (externalAbort && options.signal) options.signal.removeEventListener("abort", externalAbort);
+  }
+}
+
+/* Run a refine request with a Cancel button and a live elapsed-time line
+   so a long refine visibly stays alive. `requestFn` receives the abort
+   signal to pass to api(). Returns the api() result, or null if the user
+   cancelled (the caller then shows "Cancelled."). The button label is
+   restored and the Cancel button hidden on every exit path. */
+async function runCancellableRefine(btn, cancelBtn, statusEl, requestFn) {
+  const controller = new AbortController();
+  const originalLabel = (btn.querySelector(".btn-text") || btn).textContent;
+  btn.disabled = true; setBtnLabel(btn, "Refining…");
+  cancelBtn.style.display = "";
+  const onCancel = () => controller.abort();
+  cancelBtn.addEventListener("click", onCancel);
+  const startedAt = Date.now();
+  const tick = () => {
+    const s = Math.floor((Date.now() - startedAt) / 1000);
+    statusEl.innerHTML = statusHtml("info", `Refining… ${s}s — long texts can take up to a minute.`);
+  };
+  tick();
+  const timer = setInterval(tick, 1000);
+  try {
+    const r = await requestFn(controller.signal);
+    if (r && r.cancelled) return null;
+    return r;
+  } finally {
+    clearInterval(timer);
+    cancelBtn.removeEventListener("click", onCancel);
+    cancelBtn.style.display = "none";
+    btn.disabled = false;
+    setBtnLabel(btn, originalLabel);
+  }
 }
 
 function counts(text) {
@@ -167,6 +224,7 @@ function renderHome() {
         <div class="field"><label for="home-mode">Refinement mode</label><select id="home-mode">${modeOptions("natural")}</select></div>
         <div class="field"><label for="home-discipline">Discipline</label><select id="home-discipline">${disciplineOptions("General")}</select></div>
         <button class="btn btn-primary" id="home-refine">${icon("zap")}<span class="btn-text">Refine this text</span></button>
+        <button class="btn" id="home-cancel" style="display:none">${icon("xCircle")}<span class="btn-text">Cancel</span></button>
       </div>
       <div class="panels">
         <div class="panel"><div class="panel-head"><span>Original</span><span class="muted" id="home-counts">0 words · 0 characters</span></div>
@@ -222,9 +280,9 @@ function renderHome() {
   const updateCounts = () => { const c = counts(input.value); countsEl.textContent = `${c.words.toLocaleString()} words · ${c.chars.toLocaleString()} characters`; };
   input.addEventListener("input", updateCounts); updateCounts();
   $("#home-refine").addEventListener("click", async () => {
-    const btn = $("#home-refine"); btn.disabled = true; setBtnLabel(btn, "Refining…");
-    const r = await api("/api/refine", { text: input.value, mode: $("#home-mode").value, intensity: "balanced", discipline: $("#home-discipline").value });
-    btn.disabled = false; setBtnLabel(btn, "Refine this text");
+    const r = await runCancellableRefine($("#home-refine"), $("#home-cancel"), $("#home-status"), (signal) =>
+      api("/api/refine", { text: input.value, mode: $("#home-mode").value, intensity: "balanced", discipline: $("#home-discipline").value }, { signal }));
+    if (r === null) { $("#home-status").innerHTML = statusHtml("warn", "Cancelled."); return; }
     if (r.ok) {
       output.classList.remove("placeholder"); output.textContent = r.data.refined;
       state.lastRefined = r.data.refined; state.lastOriginal = input.value;
@@ -272,6 +330,7 @@ function renderHumanise() {
     </div>
     <div class="actions">
       <button class="btn btn-accent" id="h-refine">${icon("zap")}<span class="btn-text">Refine</span></button>
+      <button class="btn" id="h-cancel" style="display:none">${icon("xCircle")}<span class="btn-text">Cancel</span></button>
       <button class="btn" id="h-undo" disabled>${icon("undo")}<span class="btn-text">Undo</span></button>
       <button class="btn" id="h-redo" disabled>${icon("redo")}<span class="btn-text">Redo</span></button>
       <button class="btn" id="h-clear">${icon("trash")}<span class="btn-text">Clear</span></button>
@@ -289,9 +348,9 @@ function renderHumanise() {
   $("#h-refine").addEventListener("click", async () => {
     if (!input.value.trim()) { $("#h-status").innerHTML = statusHtml("warn", "Paste some text first."); return; }
     pushUndo();
-    const btn = $("#h-refine"); btn.disabled = true; setBtnLabel(btn, "Refining…");
-    const r = await api("/api/refine", { text: input.value, mode: $("#h-mode").value, intensity: $("#h-intensity").value, discipline: $("#h-discipline").value, customVoice: $("#h-voice").value });
-    btn.disabled = false; setBtnLabel(btn, "Refine");
+    const r = await runCancellableRefine($("#h-refine"), $("#h-cancel"), $("#h-status"), (signal) =>
+      api("/api/refine", { text: input.value, mode: $("#h-mode").value, intensity: $("#h-intensity").value, discipline: $("#h-discipline").value, customVoice: $("#h-voice").value }, { signal }));
+    if (r === null) { $("#h-status").innerHTML = statusHtml("warn", "Cancelled."); return; }
     if (r.ok) {
       output.classList.remove("placeholder"); output.textContent = r.data.refined;
       state.lastRefined = r.data.refined; state.lastOriginal = input.value;
@@ -330,6 +389,14 @@ function renderResearch() {
   let job = null;         // latest job view from the status endpoint
   let pollTimer = null;
   let report = null;
+  // Stall detection: the last time the job's progress/stage actually
+  // changed. A job whose background task died sits frozen forever, so
+  // if nothing changes for 3 minutes we stop polling and offer a retry
+  // instead of polling forever.
+  let lastProgressAt = 0;
+  let lastProgressKey = "";
+  const STALL_MS = 180000;
+  function progressKey(j) { return `${j.status}|${j.stage || ""}|${j.progress || 0}`; }
 
   view.innerHTML = `
   <section class="workspace">
@@ -381,6 +448,32 @@ function renderResearch() {
 
   function stopPolling() { if (pollTimer) { clearInterval(pollTimer); pollTimer = null; } }
 
+  /* Upload via XMLHttpRequest (not fetch) so upload.onprogress can show
+     a real upload percentage — a large file on a slow connection
+     otherwise sits on "Uploading…" with no feedback. Returns the same
+     { ok, status, data } shape the old fetch path produced. */
+  function uploadDocument(form, name, sizeBytes) {
+    return new Promise((resolve) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open("POST", "/api/documents/upload");
+      xhr.timeout = 120000;
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable) {
+          const pct = Math.round((e.loaded / e.total) * 100);
+          $("#d-status").innerHTML = statusHtml("info", `Uploading "${name}" (${(sizeBytes / 1000).toFixed(0)} KB)… ${pct}%`);
+        }
+      };
+      xhr.onload = () => {
+        let data = null;
+        try { data = JSON.parse(xhr.responseText); } catch { data = null; }
+        resolve({ ok: xhr.status >= 200 && xhr.status < 300, status: xhr.status, data });
+      };
+      xhr.onerror = () => resolve({ ok: false, status: 0, data: null });
+      xhr.ontimeout = () => resolve({ ok: false, status: 0, data: { message: "Upload timed out after 2 minutes. Check your connection and try again, or split the document into smaller parts." } });
+      xhr.send(form);
+    });
+  }
+
   async function handleFile(file) {
     stopPolling(); job = null; report = null;
     $("#d-result").innerHTML = ""; $("#d-progress").innerHTML = "";
@@ -396,21 +489,15 @@ function renderResearch() {
     form.append("discipline", $("#d-discipline").value);
     form.append("customVoice", $("#d-voice").value || "");
     $("#d-status").innerHTML = statusHtml("info", `Uploading "${name}" (${(file.size / 1000).toFixed(0)} KB)…`);
-    let res;
-    try {
-      res = await fetch("/api/documents/upload", { method: "POST", body: form });
-    } catch {
-      $("#d-status").innerHTML = statusHtml("error", "Upload failed — the server could not be reached. Please try again.");
+    const res = await uploadDocument(form, name, file.size);
+    if (!res.ok || !res.data || !res.data.job) {
+      $("#d-status").innerHTML = statusHtml("error", (res.data && res.data.message) || (res.status ? `Upload failed (HTTP ${res.status}).` : "Upload failed — the server could not be reached. Please try again."));
       return;
     }
-    let data = null;
-    try { data = await res.json(); } catch { data = null; }
-    if (!res.ok || !data || !data.job) {
-      $("#d-status").innerHTML = statusHtml("error", (data && data.message) || `Upload failed (HTTP ${res.status}).`);
-      return;
-    }
-    job = data.job;
+    job = res.data.job;
     $("#d-status").innerHTML = "";
+    lastProgressAt = Date.now();
+    lastProgressKey = progressKey(job);
     renderProgress();
     pollTimer = setInterval(pollStatus, 2000);
     pollStatus();
@@ -430,20 +517,54 @@ function renderResearch() {
     }
     const data = await res.json();
     job = data.job;
+    const key = progressKey(job);
+    if (key !== lastProgressKey) { lastProgressKey = key; lastProgressAt = Date.now(); }
     renderProgress();
     if (job.status === "done") { stopPolling(); await loadReport(); }
     else if (job.status === "failed" || job.status === "needs-provider") { stopPolling(); renderFailed(); }
+    else if (Date.now() - lastProgressAt > STALL_MS) { stopPolling(); renderStuck(); }
   }
 
   function renderProgress() {
     if (!job) return;
     const pct = Math.max(0, Math.min(100, job.progress || 0));
+    const elapsed = Math.max(0, Math.floor((Date.now() - new Date(job.uploadedAt).getTime()) / 1000));
     $("#d-progress").innerHTML = `<div class="card">
       <h3>${esc(job.originalFilename)}</h3>
-      <p class="small muted">${esc(job.stage || job.status)} · ${pct}% · ${(job.sizeBytes / 1000).toFixed(0)} KB · deleted ${esc(new Date(job.deletedAt).toLocaleString())}</p>
+      <p class="small muted">${esc(job.stage || job.status)} · ${pct}% · ${(job.sizeBytes / 1000).toFixed(0)} KB · ${elapsed}s elapsed · deleted ${esc(new Date(job.deletedAt).toLocaleString())}</p>
       <div class="progress"><div style="width:${pct}%"></div></div>
       <p class="small muted">Job ${esc(job.id.slice(0, 8))}… — you can leave this page; the file is deleted automatically 48 hours after upload either way.</p>
     </div>`;
+  }
+
+  /* A job whose progress/stage has not changed for 3 minutes is treated
+     as stuck (the background task may have died without marking the job
+     failed). Stop polling and offer a retry — the server accepts retries
+     for stuck jobs, not just failed ones. */
+  function renderStuck() {
+    $("#d-progress").innerHTML = `<div class="card"><h3>${esc(job ? job.originalFilename : "Document")}</h3>
+      <p>This job seems stuck — it hasn't made progress in 3 minutes. The background task may have stopped; your original file was not altered.</p>
+      <p style="margin-top:12px"><button class="btn btn-accent" id="d-retry">${icon("refresh")}<span class="btn-text">Retry processing</span></button></p></div>`;
+    attachRetry($("#d-retry"));
+  }
+
+  /* Shared retry handler for the failed/needs-provider and stuck cards:
+     re-kicks processing for the same job and resumes polling. */
+  function attachRetry(btn) {
+    if (!btn) return;
+    btn.addEventListener("click", async () => {
+      const originalLabel = (btn.querySelector(".btn-text") || btn).textContent;
+      btn.disabled = true; setBtnLabel(btn, "Retrying…");
+      const res = await fetch(`/api/documents/${job.id}/retry`, { method: "POST" });
+      if (!res.ok) { btn.disabled = false; setBtnLabel(btn, originalLabel); return; }
+      const data = await res.json();
+      job = data.job;
+      lastProgressAt = Date.now();
+      lastProgressKey = progressKey(job);
+      renderProgress();
+      pollTimer = setInterval(pollStatus, 2000);
+      pollStatus();
+    });
   }
 
   function renderFailed() {
@@ -452,16 +573,7 @@ function renderResearch() {
       ? `<p style="margin-top:12px"><button class="btn" id="d-retry">${icon("refresh")}<span class="btn-text">Retry now</span></button> <span class="small muted">Use this after a provider has been configured.</span></p>` : "";
     $("#d-progress").innerHTML = `<div class="card"><h3>${esc(job ? job.originalFilename : "Document")}</h3>
       <p>${esc(msg)}</p>${retry}</div>`;
-    const btn = $("#d-retry");
-    if (btn) btn.addEventListener("click", async () => {
-      btn.disabled = true; setBtnLabel(btn, "Retrying…");
-      const res = await fetch(`/api/documents/${job.id}/retry`, { method: "POST" });
-      if (!res.ok) { btn.disabled = false; setBtnLabel(btn, "Retry now"); return; }
-      const data = await res.json();
-      job = data.job; renderProgress();
-      pollTimer = setInterval(pollStatus, 2000);
-      pollStatus();
-    });
+    attachRetry($("#d-retry"));
   }
 
   async function loadReport() {
@@ -533,7 +645,7 @@ function renderAcademic() {
       <div class="panel"><div class="panel-head"><span>Refined</span><button class="btn btn-sm btn-ghost" id="a-copy" disabled>${icon("copy")}<span class="btn-text">Copy</span></button></div>
         <div class="panel-body"><div class="readonly placeholder" id="a-output">Your refined section will appear here.</div></div></div>
     </div>
-    <div class="actions"><button class="btn btn-accent" id="a-refine">${icon("zap")}<span class="btn-text">Refine section</span></button><button class="btn" id="a-clear">${icon("trash")}<span class="btn-text">Clear</span></button></div>
+    <div class="actions"><button class="btn btn-accent" id="a-refine">${icon("zap")}<span class="btn-text">Refine section</span></button><button class="btn" id="a-cancel" style="display:none">${icon("xCircle")}<span class="btn-text">Cancel</span></button><button class="btn" id="a-clear">${icon("trash")}<span class="btn-text">Clear</span></button></div>
     <div id="a-status"></div>
     <div id="a-claims"></div>
     <div class="grid grid-3" style="margin-top:24px">
@@ -546,9 +658,9 @@ function renderAcademic() {
   input.addEventListener("input", () => { $("#a-counts").textContent = `${counts(input.value).words.toLocaleString()} words`; });
   $("#a-refine").addEventListener("click", async () => {
     if (!input.value.trim()) { $("#a-status").innerHTML = statusHtml("warn", "Paste your section draft first."); return; }
-    const btn = $("#a-refine"); btn.disabled = true; setBtnLabel(btn, "Refining…");
-    const r = await api("/api/academic", { text: input.value, section: $("#a-section").value, discipline: $("#a-discipline").value });
-    btn.disabled = false; setBtnLabel(btn, "Refine section");
+    const r = await runCancellableRefine($("#a-refine"), $("#a-cancel"), $("#a-status"), (signal) =>
+      api("/api/academic", { text: input.value, section: $("#a-section").value, discipline: $("#a-discipline").value }, { signal }));
+    if (r === null) { $("#a-status").innerHTML = statusHtml("warn", "Cancelled."); return; }
     if (r.ok) {
       output.classList.remove("placeholder"); output.textContent = r.data.refined;
       $("#a-copy").disabled = false;
