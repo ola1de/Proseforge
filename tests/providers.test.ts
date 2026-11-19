@@ -42,4 +42,14 @@ describe("provider resolution", () => {
     await expect(p.complete({ system: "s", user: "u", maxTokens: 10, timeoutMs: 5000 })).resolves.toBe("ok");
     expect(captured).toMatchObject({ temperature: 0.3, max_tokens: 10 });
   });
+  it("the timeout race actually fires when the binding hangs (Milestone 7)", async () => {
+    // A binding whose run() never settles: complete() must still reject
+    // with AI_TIMEOUT at the timeout, not hang forever. The race is the
+    // only thing standing between a hung model call and a frozen job.
+    const env = { AI: { run: () => new Promise(() => { /* never settles */ }) } } as unknown as Env;
+    const p = new WorkersAIProvider(env);
+    const started = Date.now();
+    await expect(p.complete({ system: "s", user: "u", maxTokens: 10, timeoutMs: 100 })).rejects.toMatchObject({ code: "AI_TIMEOUT" });
+    expect(Date.now() - started).toBeLessThan(5000);
+  });
 });
