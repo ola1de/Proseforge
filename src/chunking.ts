@@ -8,7 +8,7 @@ export function countWords(text: string): number {
   return text.trim() ? words.length : 0;
 }
 
-export function splitIntoChunks(text: string, maxWords = 1500): TextChunk[] {
+export function splitIntoChunks(text: string, maxWords = 800): TextChunk[] {
   const paragraphs = text.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean);
   if (paragraphs.length === 0) return [];
   const chunks: TextChunk[] = [];
@@ -30,6 +30,16 @@ export function splitIntoChunks(text: string, maxWords = 1500): TextChunk[] {
   }
   flush();
   return chunks;
+}
+
+/** Cap the model's output tokens from the input size: roughly twice the
+ * input words (a refined text is about as long as the original), with a
+ * floor so short inputs still get room and a hard cap so the model can
+ * never ramble to 4096 tokens on a short input. Smaller caps mean
+ * shorter generations, so each call finishes faster and is less likely
+ * to hit the per-call timeout. */
+export function adaptiveMaxTokens(words: number): number {
+  return Math.min(4096, Math.max(768, Math.ceil(words * 2)));
 }
 
 /** Short terminology note carried between chunks: the most frequent content words so far. */
