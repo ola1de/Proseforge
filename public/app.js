@@ -13,6 +13,7 @@ const state = {
   redoStack: [],
   lastRefined: "",
   lastOriginal: "",
+  checkText: "",
 };
 
 const SAMPLE_ORIGINAL = "In today's fast-paced world, it is very important to note that effective communication is very crucial for success. Moreover, it is a well-known fact that many people struggle with writing. This is due to the fact that writing is a very difficult task. In conclusion, it is important to improve writing skills in order to achieve success in today's world.";
@@ -255,6 +256,7 @@ function renderHome() {
       <div class="card feature"><div class="icon-tile">${icon("book")}</div><h3>Academic Assistant</h3><p>Abstracts, introductions, problem statements, objectives, methodology, results, discussion, conclusions, and recommendations — with unsupported claims flagged, never invented.</p><a class="feature-link" href="#/academic">Refine a section ${icon("arrowRight")}</a></div>
       <div class="card feature"><div class="icon-tile">${icon("layers")}</div><h3>Writing Constructor</h3><p>Turn a basic sentence or a pile of ideas into well-constructed writing, with three alternative constructions to compare.</p><a class="feature-link" href="#/constructor">Build alternatives ${icon("arrowRight")}</a></div>
       <div class="card feature"><div class="icon-tile">${icon("chart")}</div><h3>Writing Analysis</h3><p>Readability, vocabulary diversity, repetition, sentence variation, and tone — transparent editorial indicators, honestly labelled, before and after.</p><a class="feature-link" href="#/analysis">Analyse writing ${icon("arrowRight")}</a></div>
+      <div class="card feature"><div class="icon-tile">${icon("search")}</div><h3>AI Checker</h3><p>Paste any text and see whether it reads as AI-generated or human — a transparent score with the six signals behind it, honestly labelled as an indicator, not proof.</p><a class="feature-link" href="#/checker">Check text ${icon("arrowRight")}</a></div>
       <div class="card feature"><div class="icon-tile">${icon("shield")}</div><h3>Private by design</h3><p>No login, no email, no profiles. Text is never stored. Uploaded documents are deleted automatically after 48 hours.</p><a class="feature-link" href="#/privacy">How privacy works ${icon("arrowRight")}</a></div>
     </div>
     </div>
@@ -271,6 +273,7 @@ function renderHome() {
     <details><summary>Do I need an account?</summary><p>No. There is no login, no email address, and no profile. Open the site and refine.</p></details>
     <details><summary>What happens to my text and documents?</summary><p>Text you paste is processed in memory and never stored. Uploaded documents are kept in private temporary storage and deleted automatically 48 hours after upload.</p></details>
     <details><summary>Will this make my writing undetectable by AI detectors?</summary><p>No — and Proseforge never claims that. The goal is genuinely better writing: natural rhythm, precise vocabulary, and coherent argument. Detector-evasion is not a feature.</p></details>
+    <details><summary>How accurate is the AI Checker?</summary><p>It is an indicator, not proof. The checker looks at six local signals — AI-tell phrases, sentence rhythm, vocabulary diversity, repetition, sentence shape, and filler transitions — and shows you the score with the breakdown behind it, so you can see why. No detector is perfectly accurate: short texts, edited text, and non-native English can all mislead it, and it works best on passages of 100 words or more. Use it to judge whether a refinement still reads as AI, not as a verdict on who wrote something.</p></details>
     <details><summary>Does Proseforge invent facts or references?</summary><p>No. The engine is instructed to preserve meaning and never invent facts, statistics, quotations, or references. Unsupported factual claims are flagged for you to verify.</p></details>
     <details><summary>What AI does it use?</summary><p>Cloudflare Workers AI — no extra key is needed. The model is configurable, and an optional OpenAI-compatible adapter exists for operators who prefer a different provider. Nothing is ever sent to a provider without the operator configuring one.</p></details>
     <details><summary>What does it cost to run?</summary><p>Workers AI includes a free daily allowance (10,000 neurons/day at the time of writing); beyond that, usage is metered. Operators can set request and text-size limits in configuration.</p></details>
@@ -331,6 +334,7 @@ function renderHumanise() {
     <div class="actions">
       <button class="btn btn-accent" id="h-refine">${icon("zap")}<span class="btn-text">Refine</span></button>
       <button class="btn" id="h-cancel" style="display:none">${icon("xCircle")}<span class="btn-text">Cancel</span></button>
+      <button class="btn" id="h-check" disabled>${icon("search")}<span class="btn-text">Check refined text</span></button>
       <button class="btn" id="h-undo" disabled>${icon("undo")}<span class="btn-text">Undo</span></button>
       <button class="btn" id="h-redo" disabled>${icon("redo")}<span class="btn-text">Redo</span></button>
       <button class="btn" id="h-clear">${icon("trash")}<span class="btn-text">Clear</span></button>
@@ -354,10 +358,11 @@ function renderHumanise() {
     if (r.ok) {
       output.classList.remove("placeholder"); output.textContent = r.data.refined;
       state.lastRefined = r.data.refined; state.lastOriginal = input.value;
-      $("#h-copy").disabled = false; $("#h-download").disabled = false;
+      $("#h-copy").disabled = false; $("#h-download").disabled = false; $("#h-check").disabled = false;
       $("#h-status").innerHTML = statusHtml("info", `Refined in ${r.data.chunks} chunk${r.data.chunks === 1 ? "" : "s"} · ${r.data.words.toLocaleString()} words · mode: ${esc(r.data.mode)}. Review before use — meaning is preserved, but you are the author.`);
     } else { $("#h-status").innerHTML = statusHtml("error", errorMessage(r)); }
   });
+  $("#h-check").addEventListener("click", () => { state.checkText = output.textContent; location.hash = "#/checker"; });
   $("#h-copy").addEventListener("click", async () => { await navigator.clipboard.writeText(output.textContent); $("#h-status").innerHTML = statusHtml("info", "Copied to clipboard."); });
   $("#h-download").addEventListener("click", () => downloadText("proseforge-refined.txt", output.textContent));
   $("#h-clear").addEventListener("click", () => { pushUndo(); input.value = ""; output.textContent = "Your refined text will appear here."; output.classList.add("placeholder"); $("#h-copy").disabled = true; $("#h-download").disabled = true; updateCounts(); $("#h-status").innerHTML = ""; });
@@ -372,6 +377,10 @@ function renderHumanise() {
     input.value = next.input; output.textContent = next.output; updateCounts(); syncUndo();
   });
   if (state.lastOriginal) { input.value = state.lastOriginal; }
+  if (state.lastRefined) {
+    output.classList.remove("placeholder"); output.textContent = state.lastRefined;
+    $("#h-copy").disabled = false; $("#h-download").disabled = false; $("#h-check").disabled = false;
+  }
   updateCounts();
 }
 
@@ -742,18 +751,87 @@ function renderAnalysis() {
       <div class="panel"><div class="panel-head"><span>Refined text (optional)</span></div>
         <div class="panel-body"><textarea id="an-refined" rows="10" placeholder="Paste the refined version to compare…">${esc(state.lastRefined)}</textarea></div></div>
     </div>
-    <div class="actions"><button class="btn btn-accent" id="an-run">${icon("chart")}<span class="btn-text">Analyse</span></button></div>
+    <div class="actions"><button class="btn btn-accent" id="an-run">${icon("chart")}<span class="btn-text">Analyse</span></button><button class="btn" id="an-check-orig">${icon("search")}<span class="btn-text">Check original</span></button><button class="btn" id="an-check-ref" disabled>${icon("search")}<span class="btn-text">Check refined</span></button></div>
     <div id="an-status"></div>
     <div id="an-results"></div>
   </section>`;
+  $("#an-check-orig").addEventListener("click", () => { state.checkText = $("#an-input").value; location.hash = "#/checker"; });
+  $("#an-check-ref").addEventListener("click", () => { state.checkText = $("#an-refined").value; location.hash = "#/checker"; });
+  if (state.lastRefined) { $("#an-check-ref").disabled = false; }
   $("#an-run").addEventListener("click", async () => {
     const text = $("#an-input").value, refined = $("#an-refined").value;
     if (!text.trim()) { $("#an-status").innerHTML = statusHtml("warn", "Paste the original text first."); return; }
+    if (refined.trim()) { $("#an-check-ref").disabled = false; }
     const r = await api("/api/analyse", { text, refinedText: refined.trim() || undefined });
     if (!r.ok) { $("#an-status").innerHTML = statusHtml("error", errorMessage(r)); return; }
     $("#an-status").innerHTML = "";
     $("#an-results").innerHTML = analysisHtml(r.data.original, "Original") + (r.data.refined ? analysisHtml(r.data.refined, "Refined") : `<p class="muted" style="margin-top:16px">Paste a refined version above and press Analyse again to see a before/after comparison.</p>`);
   });
+}
+
+/* ---------------- AI Checker ---------------- */
+function highlightPhrases(sentence, phrases) {
+  let out = esc(sentence);
+  for (const p of phrases) {
+    const ep = esc(p.phrase || p).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    if (!ep) continue;
+    out = out.replace(new RegExp(`(${ep})`, "gi"), "<mark>$1</mark>");
+  }
+  return out;
+}
+function checkerHtml(r) {
+  const bandClass = r.band === "Reads human" ? "teal" : r.band === "Mixed signals" ? "amber" : "red";
+  const barColor = r.band === "Reads human" ? "#0d9488" : r.band === "Mixed signals" ? "#d97706" : "#b91c1c";
+  const signalCards = r.signals.map((s) => metricCard(s.label, String(s.score), `${s.value}. ${s.detail} Weight ${Math.round(s.weight * 100)}% · contributes ${s.contribution} points.`, "search")).join("");
+  const phraseRows = r.flaggedPhrases.length
+    ? `<h3 style="margin-top:20px">AI-tell phrases found (${r.flaggedPhrases.length})</h3><table><tr><th>Phrase</th><th>Count</th></tr>${r.flaggedPhrases.map((f) => `<tr><td>“${esc(f.phrase)}”</td><td>${f.count}</td></tr>`).join("")}</table>`
+    : `<p class="small muted" style="margin-top:16px">No AI-tell phrases found in this text.</p>`;
+  const sentenceList = r.flaggedSentences.length
+    ? `<h3 style="margin-top:20px">Flagged sentences</h3><ul class="clean">${r.flaggedSentences.map((s) => `<li>“${highlightPhrases(s, r.flaggedPhrases)}”</li>`).join("")}</ul>`
+    : "";
+  return `<div class="card">
+    <div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap">
+      <span style="font-size:2.4rem;font-weight:750;letter-spacing:-0.02em">${r.score}<span class="muted" style="font-size:1.2rem"> / 100</span></span>
+      <span class="badge ${bandClass}" style="font-size:.9rem">${esc(r.band)}</span>
+      <span class="muted">${esc(r.label)} · ${r.words.toLocaleString()} words · ${r.sentences} sentences</span>
+    </div>
+    <div class="progress"><div style="width:${r.score}%;background:${barColor}"></div></div>
+    <p class="small muted">0–30 reads human · 31–60 mixed signals · 61–100 reads AI-generated. The score is the weighted sum of the six signals below — read them to see why.</p>
+    ${r.tooShort ? `<p class="small" style="margin-top:8px"><strong>Too short to judge reliably:</strong> this text is under 100 words, so the verdict above is withheld. The score and signals are still shown, but check a longer passage (100+ words) for a more reliable read.</p>` : ""}
+    <p class="small muted" style="margin-top:8px">${esc(r.note)}</p>
+  </div>
+  <h3 style="margin-top:20px">Why this score — six signals</h3>
+  <div class="metrics">${signalCards}</div>
+  ${phraseRows}
+  ${sentenceList}`;
+}
+function renderChecker() {
+  view.innerHTML = `
+  <section class="workspace">
+    <h1 class="page-title">${icon("search")} AI Checker</h1>
+    <p class="muted">Paste any writing and see whether it reads as AI-generated or human. The checker looks at six local signals — AI-tell phrases, sentence rhythm, vocabulary diversity, repetition, sentence shape, and filler transitions — and shows the score <strong>with the breakdown behind it</strong>, so you can see why.</p>
+    <p class="small muted">An indicator, not proof — short texts, edited text, and non-native English can all mislead it. It works best on passages of 100 words or more. Your text is processed in memory and never stored.</p>
+    <div class="card">
+      <label for="ck-input" style="font-weight:650;font-size:.9rem">Text to check</label>
+      <textarea id="ck-input" rows="10" placeholder="Paste the text to check…"></textarea>
+      <div class="actions"><button class="btn btn-accent" id="ck-run">${icon("search")}<span class="btn-text">Check this text</span></button><button class="btn" id="ck-clear">${icon("trash")}<span class="btn-text">Clear</span></button></div>
+      <div id="ck-status"></div>
+    </div>
+    <div id="ck-results" style="margin-top:16px"></div>
+  </section>`;
+  const input = $("#ck-input");
+  const runCheck = async () => {
+    if (!input.value.trim()) { $("#ck-status").innerHTML = statusHtml("warn", "Paste some text first."); return; }
+    const btn = $("#ck-run"); btn.disabled = true; setBtnLabel(btn, "Checking…");
+    const r = await api("/api/check", { text: input.value });
+    btn.disabled = false; setBtnLabel(btn, "Check this text");
+    if (!r.ok) { $("#ck-status").innerHTML = statusHtml("error", errorMessage(r)); return; }
+    $("#ck-status").innerHTML = "";
+    $("#ck-results").innerHTML = checkerHtml(r.data);
+  };
+  $("#ck-run").addEventListener("click", runCheck);
+  $("#ck-clear").addEventListener("click", () => { input.value = ""; $("#ck-results").innerHTML = ""; $("#ck-status").innerHTML = ""; });
+  if (state.checkText) { input.value = state.checkText; state.checkText = ""; runCheck(); }
 }
 
 /* ---------------- About & Privacy ---------------- */
@@ -808,6 +886,7 @@ const routes = {
   academic: renderAcademic,
   constructor: renderConstructor,
   analysis: renderAnalysis,
+  checker: renderChecker,
   about: renderAbout,
   privacy: renderPrivacy,
 };
