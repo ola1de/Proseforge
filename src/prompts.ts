@@ -12,6 +12,22 @@ export const MEANING_PRESERVATION_INVARIANT = [
   "Return only the refined text. No preamble, no explanation, no headings, no commentary about what you changed.",
 ].join(" ");
 
+// Human writing rules (Milestone 5). Appended to EVERY system prompt.
+// The failure they fix: the model was "improving" plain human writing into
+// something that reads MORE like AI — upgrading simple words to fancy ones,
+// stretching short sentences, and adding imagery the author never wrote.
+// These rules make minimal, faithful editing the default: change only what
+// is actually stiff, unclear, or repetitive, and never dress the author's
+// words up.
+export const HUMAN_WRITING_RULES = [
+  "Write like a human, not like an AI. Minimal change is the rule: if a sentence already sounds natural and clear, return it UNCHANGED. Only fix what is actually stiff, unclear, or repetitive.",
+  "Preserve the author's voice, rhythm, and sentence lengths — including short sentences. Do not make sentences uniform in length, and do not join short sentences into long ones.",
+  "Prefer the plainest accurate word. NEVER replace a simple word with a fancier one: say, not convey; tell, not urge; use, not utilise; help, not facilitate; get, not obtain.",
+  "Keep contractions and the author's level of formality unless the mode explicitly asks otherwise. Do not formalise casual writing and do not casualise formal writing.",
+  "NEVER use these AI-tell words and phrases: moreover, furthermore, additionally, in conclusion, in today's fast-paced world, it is important to note, it is worth noting, delve, tapestry, landscape, crucial, paramount, \"at my fingertips\", \"a testament to\", \"in the realm of\", \"plays a crucial role\", \"shed light on\", \"a wide range of\", \"in order to\" (write \"to\" instead). Never add idioms, metaphors, or filler transitions the author did not write.",
+  "Never lengthen a sentence that is already clear. Never add imagery, examples, or explanations the author did not write.",
+].join(" ");
+
 export const DISCIPLINE_NOTES: Record<string, string> = {
   "Political Science": "Use political-science conventions: precise institutional and theoretical vocabulary (e.g. governance, legitimacy, policy process), careful attribution of agency, and neutral analytical tone.",
   "Public Administration": "Use public-administration conventions: administrative process, accountability, service delivery, and policy implementation vocabulary.",
@@ -44,7 +60,7 @@ export function buildSystemPrompt(opts: PromptOptions): string {
   const intensity = findIntensity(opts.intensity) ?? findIntensity("balanced")!;
   const discipline = opts.discipline && DISCIPLINE_NOTES[opts.discipline] ? opts.discipline : "General";
   const parts = [
-    "You are Proseforge, an expert writing editor. Refine the user's text into natural, sophisticated, genuinely readable prose.",
+    "You are Proseforge, an expert writing editor. Refine the user's text into natural, genuinely readable prose.",
     mode.instruction,
     `Refinement intensity: ${intensity.label}. ${intensity.instruction}`,
     `Discipline context: ${discipline}. ${DISCIPLINE_NOTES[discipline]}`,
@@ -52,6 +68,7 @@ export function buildSystemPrompt(opts: PromptOptions): string {
   if (mode.id === "custom" && opts.customVoice?.trim()) {
     parts.push(`Custom voice requested by the user: ${opts.customVoice.trim()}`);
   }
+  parts.push(HUMAN_WRITING_RULES);
   parts.push(MEANING_PRESERVATION_INVARIANT);
   return parts.join("\n\n");
 }
@@ -78,6 +95,7 @@ export function buildAcademicPrompt(section: string, discipline?: string): strin
     "You are Proseforge, an expert academic writing editor.",
     s.instruction,
     `Discipline context: ${d}. ${DISCIPLINE_NOTES[d]}`,
+    HUMAN_WRITING_RULES,
     MEANING_PRESERVATION_INVARIANT,
     "Where a paragraph contains a factual claim with no support in the text, do not invent a citation. Leave the claim intact; the application will flag it separately for verification.",
   ].join("\n\n");
@@ -90,6 +108,7 @@ export function buildConstructPrompt(discipline?: string): string {
     "Given the user's sentence, explanation, or paragraph, produce exactly three alternative constructions of the same content, each genuinely different in sentence structure and phrasing, each preserving the original meaning exactly.",
     "Return the alternatives as a numbered list, one per line, in this exact format:\n1. <alternative one>\n2. <alternative two>\n3. <alternative three>\nNo preamble, no extra commentary.",
     `Discipline context: ${d}. ${DISCIPLINE_NOTES[d]}`,
+    HUMAN_WRITING_RULES,
     MEANING_PRESERVATION_INVARIANT,
   ].join("\n\n");
 }
